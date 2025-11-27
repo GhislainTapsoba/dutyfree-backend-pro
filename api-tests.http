@@ -1,0 +1,501 @@
+### ===========================================
+### DUTY FREE API - Fichier de test REST Client
+### ===========================================
+### Installer l'extension "REST Client" dans VS Code
+### Puis cliquez sur "Send Request" au-dessus de chaque requête
+
+@baseUrl = http://localhost:3000/api
+
+### ===========================================
+### AUTHENTIFICATION
+### ===========================================
+
+### Créer un compte admin
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "admin@dutyfree.bf",
+  "password": "Admin123!",
+  "full_name": "Administrateur",
+  "role": "admin"
+}
+
+### Créer un compte caissier
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "caissier1@dutyfree.bf",
+  "password": "Caissier123!",
+  "full_name": "Jean Dupont",
+  "role": "cashier"
+}
+
+### ===========================================
+### PRODUITS
+### ===========================================
+
+### Créer une catégorie
+POST {{baseUrl}}/products/categories
+Content-Type: application/json
+
+{
+  "code": "PARFUMS",
+  "name_fr": "Parfums & Cosmétiques",
+  "name_en": "Perfumes & Cosmetics"
+}
+
+### Créer un produit
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "code": "CHAN001",
+  "barcode": "3145891253200",
+  "name_fr": "Chanel N°5 Eau de Parfum 100ml",
+  "name_en": "Chanel N°5 Eau de Parfum 100ml",
+  "description_fr": "L'essence de la féminité",
+  "description_en": "The essence of femininity",
+  "price_xof": 98500,
+  "price_eur": 150,
+  "price_usd": 165,
+  "tax_rate": 0,
+  "stock_quantity": 25,
+  "min_stock_level": 5
+}
+
+### Liste des produits
+GET {{baseUrl}}/products
+
+### Rechercher un produit par code-barres
+GET {{baseUrl}}/products?barcode=3145891253200
+
+### Produits en rupture de stock
+GET {{baseUrl}}/products?low_stock=true
+
+### ===========================================
+### STOCK
+### ===========================================
+
+### État du stock
+GET {{baseUrl}}/stock
+
+### Créer un lot/sommier (suivi douanier)
+POST {{baseUrl}}/stock/lots
+Content-Type: application/json
+
+{
+  "lot_number": "LOT-2025-001",
+  "customs_declaration": "DEC-OUA-2025-00123",
+  "arrival_date": "2025-01-15",
+  "expiry_date": "2026-01-15",
+  "supplier_id": "uuid-fournisseur",
+  "products": [
+    {
+      "product_id": "uuid-produit",
+      "quantity": 50,
+      "unit_cost": 75000
+    }
+  ]
+}
+
+### Mouvements de stock
+GET {{baseUrl}}/stock/movements?start_date=2025-01-01
+
+### Enregistrer un mouvement d'entrée
+POST {{baseUrl}}/stock/movements
+Content-Type: application/json
+
+{
+  "product_id": "uuid-produit",
+  "movement_type": "entry",
+  "quantity": 20,
+  "lot_id": "uuid-lot",
+  "reference": "Réception commande CMD-001",
+  "user_id": "uuid-user"
+}
+
+### ===========================================
+### INVENTAIRE
+### ===========================================
+
+### Créer une session d'inventaire
+POST {{baseUrl}}/stock/inventory
+Content-Type: application/json
+
+{
+  "point_of_sale_id": "uuid-pos",
+  "user_id": "uuid-user"
+}
+
+### Valider l'inventaire avec les comptages
+PUT {{baseUrl}}/stock/inventory/uuid-inventory
+Content-Type: application/json
+
+{
+  "status": "completed",
+  "items": [
+    {
+      "product_id": "uuid-produit",
+      "counted_quantity": 23,
+      "system_quantity": 25
+    }
+  ]
+}
+
+### ===========================================
+### FOURNISSEURS
+### ===========================================
+
+### Créer un fournisseur
+POST {{baseUrl}}/suppliers
+Content-Type: application/json
+
+{
+  "code": "FOUR001",
+  "name": "LVMH Distribution",
+  "contact_name": "Marie Martin",
+  "email": "contact@lvmh-dist.com",
+  "phone": "+33 1 44 13 22 22",
+  "address": "22 Avenue Montaigne, 75008 Paris",
+  "country": "France",
+  "payment_terms": 30
+}
+
+### Liste des fournisseurs
+GET {{baseUrl}}/suppliers
+
+### ===========================================
+### COMMANDES FOURNISSEUR
+### ===========================================
+
+### Créer une commande
+POST {{baseUrl}}/purchase-orders
+Content-Type: application/json
+
+{
+  "supplier_id": "uuid-fournisseur",
+  "expected_date": "2025-02-01",
+  "items": [
+    {
+      "product_id": "uuid-produit",
+      "quantity": 30,
+      "unit_cost": 75000
+    }
+  ],
+  "shipping_cost": 150000,
+  "insurance_cost": 25000
+}
+
+### Réceptionner une commande
+PUT {{baseUrl}}/purchase-orders/uuid-order
+Content-Type: application/json
+
+{
+  "status": "received",
+  "received_items": [
+    {
+      "product_id": "uuid-produit",
+      "received_quantity": 30
+    }
+  ]
+}
+
+### ===========================================
+### CAISSES & SESSIONS
+### ===========================================
+
+### Créer un point de vente
+POST {{baseUrl}}/point-of-sales
+Content-Type: application/json
+
+{
+  "code": "POS-HALL-A",
+  "name": "Boutique Hall A - Départs",
+  "location": "Terminal International - Hall A"
+}
+
+### Créer une caisse
+POST {{baseUrl}}/cash-registers
+Content-Type: application/json
+
+{
+  "code": "CAISSE-01",
+  "name": "Caisse 1",
+  "point_of_sale_id": "uuid-pos"
+}
+
+### Ouvrir une session de caisse
+POST {{baseUrl}}/cash-sessions
+Content-Type: application/json
+
+{
+  "cash_register_id": "uuid-caisse",
+  "cashier_id": "uuid-caissier",
+  "opening_amount": 50000
+}
+
+### Session de caisse en cours
+GET {{baseUrl}}/cash-sessions/current?cashier_id=uuid-caissier
+
+### Fermer une session de caisse
+PUT {{baseUrl}}/cash-sessions/uuid-session
+Content-Type: application/json
+
+{
+  "status": "closed",
+  "closing_amount": 485000,
+  "closing_notes": "RAS"
+}
+
+### ===========================================
+### VENTES
+### ===========================================
+
+### Enregistrer une vente
+POST {{baseUrl}}/sales
+Content-Type: application/json
+
+{
+  "cash_session_id": "uuid-session",
+  "cashier_id": "uuid-caissier",
+  "point_of_sale_id": "uuid-pos",
+  "passenger_id": "uuid-passager",
+  "items": [
+    {
+      "product_id": "uuid-produit-1",
+      "quantity": 1,
+      "unit_price": 98500,
+      "discount_amount": 0
+    },
+    {
+      "product_id": "uuid-produit-2",
+      "quantity": 2,
+      "unit_price": 45000,
+      "discount_amount": 5000
+    }
+  ],
+  "payments": [
+    {
+      "method": "card",
+      "currency": "EUR",
+      "amount": 280,
+      "amount_xof": 183500
+    }
+  ]
+}
+
+### Liste des ventes du jour
+GET {{baseUrl}}/sales?date=2025-01-15
+
+### Détail d'une vente
+GET {{baseUrl}}/sales/uuid-vente
+
+### Générer le ticket de caisse
+GET {{baseUrl}}/sales/uuid-vente/receipt
+
+### Rechercher par numéro de ticket
+GET {{baseUrl}}/sales/by-ticket/TKT-20250115-001
+
+### ===========================================
+### PAIEMENTS & DEVISES
+### ===========================================
+
+### Liste des devises
+GET {{baseUrl}}/currencies
+
+### Mettre à jour le taux de change EUR
+PUT {{baseUrl}}/currencies/EUR
+Content-Type: application/json
+
+{
+  "exchange_rate": 655.957,
+  "is_active": true
+}
+
+### Convertir un montant
+POST {{baseUrl}}/currencies/convert
+Content-Type: application/json
+
+{
+  "amount": 150,
+  "from_currency": "EUR",
+  "to_currency": "XOF"
+}
+
+### Méthodes de paiement
+GET {{baseUrl}}/payments/methods
+
+### ===========================================
+### PROMOTIONS
+### ===========================================
+
+### Créer une promotion
+POST {{baseUrl}}/promotions
+Content-Type: application/json
+
+{
+  "code": "NOEL2025",
+  "name_fr": "Offre de Noël",
+  "name_en": "Christmas Offer",
+  "discount_type": "percentage",
+  "discount_value": 15,
+  "start_date": "2025-12-20",
+  "end_date": "2025-12-31",
+  "min_purchase_amount": 50000,
+  "applicable_categories": ["uuid-cat-parfums"]
+}
+
+### Promotions actives
+GET {{baseUrl}}/promotions?active=true
+
+### ===========================================
+### FIDÉLITÉ
+### ===========================================
+
+### Créer une carte de fidélité
+POST {{baseUrl}}/loyalty/cards
+Content-Type: application/json
+
+{
+  "card_number": "LOYAL-2025-00001",
+  "customer_name": "Amadou Diallo",
+  "customer_email": "amadou.diallo@email.com",
+  "customer_phone": "+226 70 00 00 00"
+}
+
+### Ajouter des points
+POST {{baseUrl}}/loyalty/cards/uuid-card/points
+Content-Type: application/json
+
+{
+  "action": "add",
+  "points": 150,
+  "sale_id": "uuid-vente",
+  "description": "Achat du 15/01/2025"
+}
+
+### ===========================================
+### CLIENTS HÉBERGÉS
+### ===========================================
+
+### Enregistrer un client hébergé
+POST {{baseUrl}}/hotel-guests
+Content-Type: application/json
+
+{
+  "guest_name": "Pierre Martin",
+  "badge_number": "BADGE-2025-001",
+  "hotel_name": "Sofitel Ouagadougou",
+  "check_in_date": "2025-01-15",
+  "check_out_date": "2025-01-18",
+  "discount_percentage": 10
+}
+
+### ===========================================
+### PASSAGERS
+### ===========================================
+
+### Enregistrer info passager (scan carte embarquement)
+POST {{baseUrl}}/passengers
+Content-Type: application/json
+
+{
+  "first_name": "John",
+  "last_name": "Smith",
+  "flight_number": "AF 789",
+  "airline": "Air France",
+  "destination": "Paris CDG",
+  "departure_time": "2025-01-15T14:30:00Z",
+  "boarding_pass_ref": "ABC123"
+}
+
+### ===========================================
+### DONNÉES EXTERNES
+### ===========================================
+
+### Saisir nombre de passagers mensuel (donnée aéroport)
+POST {{baseUrl}}/external-data
+Content-Type: application/json
+
+{
+  "data_type": "monthly_passengers",
+  "period": "2025-01",
+  "value": 45000,
+  "source": "Direction Aéroport Ouagadougou"
+}
+
+### ===========================================
+### REPORTING
+### ===========================================
+
+### Rapport des ventes journalier
+GET {{baseUrl}}/reports/sales?period=daily&date=2025-01-15
+
+### Rapport des ventes mensuel
+GET {{baseUrl}}/reports/sales?period=monthly&month=2025-01
+
+### Rapport par point de vente
+GET {{baseUrl}}/reports/sales?period=daily&point_of_sale_id=uuid-pos
+
+### Rapport par vendeur
+GET {{baseUrl}}/reports/sales?period=daily&cashier_id=uuid-caissier
+
+### Rapport par famille de produits
+GET {{baseUrl}}/reports/sales?period=monthly&group_by=category
+
+### Rapport du stock
+GET {{baseUrl}}/reports/stock
+
+### Valorisation du stock
+GET {{baseUrl}}/reports/stock?type=valuation
+
+### Produits en rupture
+GET {{baseUrl}}/reports/stock?type=shortages
+
+### Rapport des paiements par méthode
+GET {{baseUrl}}/reports/payments?period=daily&date=2025-01-15
+
+### Performance des caissiers
+GET {{baseUrl}}/reports/cashiers?period=monthly&month=2025-01
+
+### KPIs (ticket moyen, taux de capture)
+GET {{baseUrl}}/reports/kpi?period=monthly&month=2025-01
+
+### Export CSV des ventes
+GET {{baseUrl}}/reports/export?type=sales&start_date=2025-01-01&end_date=2025-01-31&format=csv
+
+### Export Excel des mouvements stock
+GET {{baseUrl}}/reports/export?type=stock_movements&start_date=2025-01-01&end_date=2025-01-31&format=xlsx
+
+### ===========================================
+### PARAMÈTRES
+### ===========================================
+
+### Infos société
+GET {{baseUrl}}/settings/company
+
+### Modifier infos société
+PUT {{baseUrl}}/settings/company
+Content-Type: application/json
+
+{
+  "company_name": "Duty Free Ouagadougou",
+  "tax_id": "BF-00012345",
+  "address": "Aéroport International de Ouagadougou",
+  "phone": "+226 25 30 65 00",
+  "email": "contact@dutyfree-ouaga.bf",
+  "logo_url": "/images/logo.png"
+}
+
+### Messages ticket de caisse
+PUT {{baseUrl}}/settings/receipt-messages
+Content-Type: application/json
+
+{
+  "header_message_1": "Bienvenue!",
+  "header_message_2": "Duty Free Ouagadougou",
+  "header_message_3": "Promo: -10% sur les parfums du 20 au 24/04",
+  "footer_message": "Merci de votre visite! Bon voyage et à bientôt!"
+}

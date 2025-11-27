@@ -1,0 +1,9 @@
+### Test de l'API users/me
+GET http://localhost:3001/api/users/me
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### Test de l'API reports/sales (qui causait l'erreur 500)
+GET http://localhost:3001/api/reports/sales?start_date=2025-11-27&end_date=2025-11-27&group_by=day
+
+### Test de l'API reports/kpi
+GET http://localhost:3001/api/reports/kpi?start_date=2025-11-27&end_date=2025-11-27

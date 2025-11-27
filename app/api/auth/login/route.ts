@@ -1,0 +1,137 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+
+export async function POST(request: NextRequest) {
+  console.log("[LOGIN] Request received from:", request.headers.get("origin"));
+  console.log("[LOGIN] Method:", request.method);
+  console.log("[LOGIN] URL:", request.url);
+
+  try {
+    const supabase = await createClient();
+    const body = await request.json();
+
+    console.log("[LOGIN] Body parsed:", { username: body.username, email: body.email });
+
+    const { username, password, email } = body;
+
+    // Support both username and email login
+    const loginEmail = email || username;
+
+    console.log("[LOGIN] loginEmail:", loginEmail);
+    console.log("[LOGIN] password length:", password?.length);
+
+    if (!loginEmail || !password) {
+      console.log("[LOGIN] Missing credentials");
+      return NextResponse.json(
+        { message: "Email/Username et mot de passe requis" },
+        { status: 400 }
+      );
+    }
+
+    // Si c'est un username (pas d'@), chercher l'email correspondant
+    let userEmail = loginEmail;
+    console.log("[LOGIN] Checking if loginEmail contains @:", loginEmail.includes("@"));
+    if (!loginEmail.includes("@")) {
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("email")
+        .eq("employee_id", loginEmail)
+        .single();
+
+      if (userError || !userData) {
+        return NextResponse.json(
+          { message: "Identifiants invalides" },
+          { status: 401 }
+        );
+      }
+
+      userEmail = userData.email;
+    }
+
+    // Authentification avec Supabase
+    console.log("[LOGIN] Attempting Supabase auth with email:", userEmail);
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: userEmail,
+      password: password,
+    });
+
+    if (authError) {
+      console.error("[LOGIN] Auth error:", authError);
+      return NextResponse.json(
+        { message: "Identifiants invalides" },
+        { status: 401 }
+      );
+    }
+
+    console.log("[LOGIN] Auth successful, user ID:", authData.user?.id);
+
+    if (!authData.user) {
+      return NextResponse.json(
+        { message: "Erreur d'authentification" },
+        { status: 500 }
+      );
+    }
+
+    // Récupérer le profil utilisateur
+    console.log("[LOGIN] Fetching user profile for ID:", authData.user.id);
+    const { data: userProfile, error: profileError } = await supabase
+      .from("users")
+      .select(`
+        *,
+        role:roles(id, code, name, permissions)
+      `)
+      .eq("id", authData.user.id)
+      .single();
+
+    if (profileError || !userProfile) {
+      console.error("[LOGIN] Profile error:", profileError);
+      return NextResponse.json(
+        { message: "Profil utilisateur non trouvé" },
+        { status: 404 }
+      );
+    }
+
+    console.log("[LOGIN] Profile found, role:", userProfile.role?.code);
+
+    // Vérifier si l'utilisateur est actif
+    const isActive = userProfile.is_active ?? userProfile.active ?? true;
+    console.log("[LOGIN] User active status:", isActive);
+    if (isActive === false) {
+      console.log("[LOGIN] User account is disabled");
+      return NextResponse.json(
+        { message: "Compte désactivé" },
+        { status: 403 }
+      );
+    }
+
+    // Log de l'activité
+    await supabase.from("user_activity_logs").insert({
+      user_id: authData.user.id,
+      action: "login",
+      entity_type: "auth",
+      details: { email: userEmail },
+    });
+
+    // Formater la réponse selon le format attendu par le frontend
+    return NextResponse.json({
+      token: authData.session?.access_token || "",
+      user: {
+        id: userProfile.id,
+        username: userProfile.employee_id || userProfile.email,
+        email: userProfile.email,
+        firstName: userProfile.first_name,
+        lastName: userProfile.last_name,
+        role: userProfile.role?.code || "user",
+        isActive: isActive,
+        createdAt: userProfile.created_at,
+        updatedAt: userProfile.updated_at,
+      },
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+    return NextResponse.json(
+      { message: "Erreur interne du serveur" },
+      { status: 500 }
+    );
+  }
+}
