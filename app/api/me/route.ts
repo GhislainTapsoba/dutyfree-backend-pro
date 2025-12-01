@@ -1,33 +1,29 @@
 import { createClient } from "@/lib/supabase/server"
-import { NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 
-// Fonction pour extraire et valider l'utilisateur via Bearer Token Supabase
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get("Authorization")
-  if (!authHeader?.startsWith("Bearer ")) return null
-
-  const token = authHeader.replace("Bearer ", "").trim()
-  const supabase = await createClient()
-
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) {
-    console.error("Utilisateur non authentifié:", error)
-    return null
-  }
-  return data.user
-}
-
-// GET - Récupérer le profil utilisateur complet
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const user = await getAuthenticatedUser(request)
+    
+    // ✅ EXTRAIT Bearer token du header (comme ton client fait)
+    const authHeader = request.headers.get('Authorization')
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+    
+    console.log('[DEBUG] Bearer token extrait:', token ? 'OK' : 'NULL')
 
-    if (!user) {
+    if (!token) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    const { data, error } = await supabase
+    // ✅ VALIDATION JWT avec Supabase (comme getAuthenticatedUser interne)
+    const { data: { user }, error } = await supabase.auth.getUser(token)
+    
+    if (error || !user) {
+      console.log('[DEBUG] JWT invalide')
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+    }
+
+    const { data, error: profileError } = await supabase
       .from("users")
       .select(`
         *,
@@ -37,8 +33,7 @@ export async function GET(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    if (error || !data) {
-      console.error("[/api/users/me] Profil non trouvé", error)
+    if (profileError || !data) {
       return NextResponse.json({ error: "Profil non trouvé" }, { status: 404 })
     }
 
@@ -48,11 +43,10 @@ export async function GET(request: NextRequest) {
       email: data.email,
       firstName: data.first_name,
       lastName: data.last_name,
-      role: data.role?.code || "guest",
-      isActive: data.is_active,   // ATTENTION, bien is_active
+      role: data.role?.code || "user",
+      isActive: data.is_active,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
-      permissions: data.role?.permissions || [],
     })
   } catch (error) {
     console.error("Error fetching user profile:", error)
@@ -60,17 +54,25 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PUT - Mettre à jour son profil utilisateur
 export async function PUT(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const user = await getAuthenticatedUser(request)
-
-    if (!user) {
+    const body = await request.json()
+    
+    // ✅ Même extraction Bearer token
+    const authHeader = request.headers.get('Authorization')
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+    
+    if (!token) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    const body = await request.json()
+    const { data: { user }, error } = await supabase.auth.getUser(token)
+    
+    if (error || !user) {
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+    }
+
     const { first_name, last_name, phone } = body
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
@@ -80,7 +82,7 @@ export async function PUT(request: NextRequest) {
     if (last_name !== undefined) updateData.last_name = last_name
     if (phone !== undefined) updateData.phone = phone
 
-    const { data, error } = await supabase
+    const { data, error: updateError } = await supabase
       .from("users")
       .update(updateData)
       .eq("id", user.id)
@@ -91,14 +93,13 @@ export async function PUT(request: NextRequest) {
       `)
       .single()
 
-    if (error) {
-      console.error("[/api/users/me PUT] Erreur update:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
     return NextResponse.json({ data })
   } catch (error) {
-    console.error("[/api/users/me PUT] Erreur interne:", error)
+    console.error("Error updating user profile:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

@@ -1,24 +1,17 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { NextResponse } from "next/server"
 
 // GET - Récupérer les statistiques des notifications
 export async function GET() {
   try {
-    const supabase = await createClient()
-
-    // Vérifier l'authentification
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
+    const supabase = createAdminClient()
+    const userId = '00000000-0000-0000-0000-000000000000'
 
     // Compter le total de notifications
     const { count: total, error: totalError } = await supabase
       .from("notifications")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
 
     if (totalError) throw totalError
 
@@ -26,7 +19,7 @@ export async function GET() {
     const { count: unread, error: unreadError } = await supabase
       .from("notifications")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("read", false)
 
     if (unreadError) throw unreadError

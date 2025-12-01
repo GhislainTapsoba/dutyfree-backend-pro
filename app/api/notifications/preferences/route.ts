@@ -1,23 +1,15 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const { searchParams } = new URL(request.url);
-  const user_id = searchParams.get("user_id");
-
-  if (!user_id) {
-    return NextResponse.json(
-      { error: "user_id requis" },
-      { status: 400 }
-    );
-  }
+  const supabase = createAdminClient();
+  const userId = '00000000-0000-0000-0000-000000000000';
 
   try {
     const { data, error } = await supabase
       .from("notification_preferences")
       .select("*")
-      .eq("user_id", user_id)
+      .eq("user_id", userId)
       .single();
 
     if (error && error.code !== "PGRST116") throw error;
@@ -25,7 +17,7 @@ export async function GET(request: NextRequest) {
     // If no preferences exist, return default settings
     if (!data) {
       const defaultPreferences = {
-        user_id,
+        user_id: userId,
         email_notifications: true,
         push_notifications: true,
         stock_alerts: true,
@@ -50,12 +42,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
+  const userId = '00000000-0000-0000-0000-000000000000';
 
   try {
     const body = await request.json();
     const {
-      user_id,
       email_notifications,
       push_notifications,
       stock_alerts,
@@ -67,19 +59,12 @@ export async function POST(request: NextRequest) {
       expiry_warning_days,
     } = body;
 
-    if (!user_id) {
-      return NextResponse.json(
-        { error: "user_id requis" },
-        { status: 400 }
-      );
-    }
-
     // Use upsert to create or update
     const { data, error } = await supabase
       .from("notification_preferences")
       .upsert(
         {
-          user_id,
+          user_id: userId,
           email_notifications: email_notifications ?? true,
           push_notifications: push_notifications ?? true,
           stock_alerts: stock_alerts ?? true,

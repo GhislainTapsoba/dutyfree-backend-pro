@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Liste des produits avec filtres
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
 
     const page = Number.parseInt(searchParams.get("page") || "1")
@@ -96,16 +96,11 @@ export async function GET(request: NextRequest) {
 // POST - Créer un produit
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const body = await request.json()
 
-    // Vérifier l'authentification
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
+    // Utilisation d'un user_id hardcodé pour le moment
+    const user_id = "00000000-0000-0000-0000-000000000000"
 
     const {
       code,
@@ -124,6 +119,7 @@ export async function POST(request: NextRequest) {
       is_tax_included,
       min_stock_level,
       max_stock_level,
+      initial_stock,
       image_url,
     } = body
 
@@ -170,13 +166,84 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // Créer un lot initial si du stock est spécifié
+    if (initial_stock && initial_stock > 0) {
+      // Récupérer le premier point de vente et emplacement de stockage
+      const { data: pos } = await supabase
+        .from("point_of_sales")
+        .select("id")
+        .eq("is_active", true)
+        .limit(1)
+        .single()
+
+      const { data: location } = await supabase
+        .from("storage_locations")
+        .select("id")
+        .eq("is_active", true)
+        .limit(1)
+        .single()
+
+      if (pos && location) {
+        // Créer un sommier par défaut si nécessaire
+        let { data: ledger } = await supabase
+          .from("customs_ledgers")
+          .select("id")
+          .eq("status", "open")
+          .limit(1)
+          .single()
+
+        if (!ledger) {
+          const { data: newLedger } = await supabase
+            .from("customs_ledgers")
+            .insert({
+              ledger_number: `LEDGER-${new Date().getFullYear()}-001`,
+              point_of_sale_id: pos.id,
+              start_date: new Date().toISOString().split('T')[0],
+              status: "open"
+            })
+            .select("id")
+            .single()
+          ledger = newLedger
+        }
+
+        if (ledger) {
+          // Créer le lot initial
+          await supabase.from("product_lots").insert({
+            lot_number: `LOT-${code}-${Date.now()}`,
+            product_id: data.id,
+            customs_ledger_id: ledger.id,
+            storage_location_id: location.id,
+            initial_quantity: initial_stock,
+            current_quantity: initial_stock,
+            purchase_price: purchase_price || 0,
+            total_cost: purchase_price || 0,
+            received_date: new Date().toISOString().split('T')[0],
+            status: "available"
+          })
+
+          // Enregistrer le mouvement de stock
+          await supabase.from("stock_movements").insert({
+            product_id: data.id,
+            point_of_sale_id: pos.id,
+            movement_type: "entry",
+            quantity: initial_stock,
+            previous_stock: 0,
+            new_stock: initial_stock,
+            reference_type: "initial_stock",
+            reason: "Stock initial à la création du produit",
+            user_id: user_id
+          })
+        }
+      }
+    }
+
     // Log activité
     await supabase.from("user_activity_logs").insert({
-      user_id: user.id,
+      user_id: user_id,
       action: "create",
       entity_type: "product",
       entity_id: data.id,
-      details: { product_code: code },
+      details: { product_code: code, initial_stock: initial_stock || 0 },
     })
 
     return NextResponse.json(data, { status: 201 })

@@ -1,0 +1,32 @@
+### Variables
+@baseUrl = http://localhost:3001/api
+@token = your_jwt_token_here
+
+### Get notification preferences
+GET {{baseUrl}}/notifications/preferences
+Authorization: Bearer {{token}}
+
+### Get notifications
+GET {{baseUrl}}/notifications?limit=10
+Authorization: Bearer {{token}}
+
+### Get notification stats
+GET {{baseUrl}}/notifications/stats
+Authorization: Bearer {{token}}
+
+### Update notification preferences
+POST {{baseUrl}}/notifications/preferences
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "email_notifications": true,
+  "push_notifications": true,
+  "stock_alerts": true,
+  "expiry_alerts": true,
+  "order_updates": true,
+  "promotion_alerts": true,
+  "system_alerts": true,
+  "low_stock_threshold": 5,
+  "expiry_warning_days": 15
+}

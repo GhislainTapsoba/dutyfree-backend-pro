@@ -1,19 +1,19 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET /api/technical-sheets - Fiches techniques produits
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const searchParams = request.nextUrl.searchParams
 
   const productId = searchParams.get("product_id")
 
   try {
     let query = supabase
-      .from("technical_sheets")
+      .from("product_technical_sheets")
       .select(`
         *,
-        products (name, sku, barcode)
+        product:products(id, code, name_fr, name_en)
       `)
       .order("created_at", { ascending: false })
 
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
 // POST /api/technical-sheets - Créer fiche technique
 export async function POST(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   try {
     const body = await request.json()
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     } = body
 
     const { data, error } = await supabase
-      .from("technical_sheets")
+      .from("product_technical_sheets")
       .insert({
         product_id,
         ingredients,

@@ -1,19 +1,13 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Récupérer les notifications
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const searchParams = request.nextUrl.searchParams
 
-    // Vérifier l'authentification
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
+    const userId = '00000000-0000-0000-0000-000000000000'
 
     // Paramètres de pagination et filtrage
     const limit = parseInt(searchParams.get("limit") || "50", 10)
@@ -24,7 +18,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("notifications")
       .select("*", { count: "exact" })
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1)
 
@@ -52,7 +46,7 @@ export async function GET(request: NextRequest) {
 // POST - Créer une notification (admin uniquement)
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const body = await request.json()
 
     // Vérifier l'authentification

@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     let query = supabase.from("sales").select(
       `
         *,
-        seller:users(id, first_name, last_name, employee_id),
+        seller:users!sales_seller_id_fkey(id, first_name, last_name, employee_id),
         cash_register:cash_registers(id, code, name),
         point_of_sale:point_of_sales(id, code, name)
       `,
@@ -62,11 +62,11 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query
 
     if (error) {
+      console.error("Error fetching sales:", error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Retourner directement le tableau de ventes
-    return NextResponse.json(data)
+    return NextResponse.json({ data, count })
   } catch (error) {
     console.error("Error fetching sales:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -283,7 +283,7 @@ export async function POST(request: NextRequest) {
       .from("sales")
       .select(`
         *,
-        seller:users(id, first_name, last_name),
+        seller:users!sales_seller_id_fkey(id, first_name, last_name),
         lines:sale_lines(
           *,
           product:products(id, code, name_fr, name_en)

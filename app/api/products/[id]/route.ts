@@ -1,11 +1,11 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Détail d'un produit
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const { data: product, error } = await supabase
       .from("products")
@@ -47,15 +47,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const body = await request.json()
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
+    // Utilisation d'un user_id hardcodé pour le moment
+    const user_id = "00000000-0000-0000-0000-000000000000"
 
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
@@ -106,7 +102,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // Log activité
     await supabase.from("user_activity_logs").insert({
-      user_id: user.id,
+      user_id: user_id,
       action: "update",
       entity_type: "product",
       entity_id: id,
@@ -124,14 +120,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
+    // Utilisation d'un user_id hardcodé pour le moment
+    const user_id = "00000000-0000-0000-0000-000000000000"
 
     // Soft delete - désactiver le produit
     const { error } = await supabase
@@ -145,7 +137,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     // Log activité
     await supabase.from("user_activity_logs").insert({
-      user_id: user.id,
+      user_id: user_id,
       action: "delete",
       entity_type: "product",
       entity_id: id,

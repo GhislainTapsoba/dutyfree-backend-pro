@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
 
   // Paramètres de filtrage
   const period = searchParams.get("period") || "daily" // daily, weekly, monthly, decade, hourly
+  const groupBy = searchParams.get("group_by") // day, week, month
   const startDate = searchParams.get("start_date")
   const endDate = searchParams.get("end_date")
   const posId = searchParams.get("pos_id")
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
           line_total,
           products (name_fr, category_id, product_categories (name_fr))
         ),
-        payments (amount, payment_method, currency_code)
+        payments (amount, payment_method_id, payment_method, currency_code)
       `)
       .eq("status", "completed")
 
@@ -78,7 +79,7 @@ export async function GET(request: NextRequest) {
     const paymentBreakdown: Record<string, number> = {}
     sales?.forEach((sale) => {
       sale.payments?.forEach((payment: any) => {
-        const method = payment.payment_method
+        const method = payment.payment_method || payment.payment_method_id || 'unknown'
         paymentBreakdown[method] = (paymentBreakdown[method] || 0) + Number(payment.amount)
       })
     })
@@ -131,6 +132,37 @@ export async function GET(request: NextRequest) {
       hourlyBreakdown[hourKey].revenue += Number(sale.total_ttc)
     })
 
+    // Groupement par période si demandé
+    let groupedData: any[] = []
+    if (groupBy) {
+      const grouped: Record<string, { date: string; sales: number; revenue: number }> = {}
+      
+      sales?.forEach((sale) => {
+        const date = new Date(sale.sale_date)
+        let key: string
+        
+        if (groupBy === 'day') {
+          key = date.toISOString().split('T')[0]
+        } else if (groupBy === 'week') {
+          const weekStart = new Date(date)
+          weekStart.setDate(date.getDate() - date.getDay())
+          key = weekStart.toISOString().split('T')[0]
+        } else if (groupBy === 'month') {
+          key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        } else {
+          key = date.toISOString().split('T')[0]
+        }
+        
+        if (!grouped[key]) {
+          grouped[key] = { date: key, sales: 0, revenue: 0 }
+        }
+        grouped[key].sales++
+        grouped[key].revenue += Number(sale.total_ttc)
+      })
+      
+      groupedData = Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date))
+    }
+
     return NextResponse.json({
       summary: {
         total_revenue_ttc: totalRevenue,
@@ -147,7 +179,8 @@ export async function GET(request: NextRequest) {
         by_point_of_sale: posBreakdown,
         by_hour: hourlyBreakdown,
       },
-      period: { start: startDate, end: endDate, type: period },
+      grouped_data: groupedData,
+      period: { start: startDate, end: endDate, type: period, group_by: groupBy },
       raw_data: sales,
     })
   } catch (error) {

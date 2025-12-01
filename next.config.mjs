@@ -6,6 +6,9 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  experimental: {
+    optimizePackageImports: ['@radix-ui/react-icons'],
+  },
 }
 
 export default nextConfig
