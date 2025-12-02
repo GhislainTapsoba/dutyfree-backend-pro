@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
   try {
     let query = supabase
-      .from("product_technical_sheets")
+      .from("technical_sheets")
       .select(`
         *,
         product:products(id, code, name_fr, name_en)
@@ -39,29 +39,43 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       product_id,
+      sheet_code,
       ingredients,
       allergens,
       nutritional_info,
       storage_conditions,
-      origin_country,
+      country_of_origin,
       certifications,
-      customs_code,
+      hs_code,
       net_weight,
       gross_weight,
       dimensions,
+      shelf_life_days,
     } = body
 
+    // Construire l'objet specifications avec toutes les données
+    const specifications = {
+      allergens,
+      nutritional_info,
+      storage_conditions,
+      certifications,
+      hs_code,
+      gross_weight,
+      shelf_life_days,
+    }
+
     const { data, error } = await supabase
-      .from("product_technical_sheets")
+      .from("technical_sheets")
       .insert({
         product_id,
+        sheet_code,
         ingredients,
-        allergens,
+        allergens: typeof allergens === 'string' ? [allergens] : (allergens || []),
         nutritional_info,
         storage_conditions,
-        origin_country,
-        certifications,
-        customs_code,
+        origin_country: country_of_origin,
+        certifications: typeof certifications === 'string' ? [certifications] : (certifications || []),
+        customs_code: hs_code,
         net_weight,
         gross_weight,
         dimensions,

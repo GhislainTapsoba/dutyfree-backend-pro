@@ -1,9 +1,9 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET /api/reports/cashiers - Rapport par caissier
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const searchParams = request.nextUrl.searchParams
 
   const startDate = searchParams.get("start_date")
@@ -16,35 +16,35 @@ export async function GET(request: NextRequest) {
       .from("cash_sessions")
       .select(`
         id,
-        cashier_id,
+        user_id,
         users (full_name, employee_id),
         cash_register_id,
-        cash_registers (name, pos_id, point_of_sales (name)),
-        start_time,
-        end_time,
-        opening_amount,
-        closing_amount,
-        expected_amount,
-        variance,
+        cash_registers (name, point_of_sales (name)),
+        opening_time,
+        closing_time,
+        opening_cash,
+        closing_cash,
+        expected_cash,
+        cash_variance,
         status,
         sales (
           id,
-          total_amount,
-          total_tax,
+          total_ttc,
+          tax_amount,
           discount_amount,
           payments (payment_method, amount, currency_code)
         )
       `)
-      .order("start_time", { ascending: false })
+      .order("opening_time", { ascending: false })
 
     if (startDate) {
-      sessionsQuery = sessionsQuery.gte("start_time", startDate)
+      sessionsQuery = sessionsQuery.gte("opening_time", startDate)
     }
     if (endDate) {
-      sessionsQuery = sessionsQuery.lte("start_time", endDate)
+      sessionsQuery = sessionsQuery.lte("opening_time", endDate)
     }
     if (cashierId) {
-      sessionsQuery = sessionsQuery.eq("cashier_id", cashierId)
+      sessionsQuery = sessionsQuery.eq("user_id", cashierId)
     }
 
     const { data: sessions, error } = await sessionsQuery
@@ -83,11 +83,11 @@ export async function GET(request: NextRequest) {
       }
 
       cashierStats[cashierName].sessions_count++
-      cashierStats[cashierName].total_variance += Number(session.variance) || 0
+      cashierStats[cashierName].total_variance += Number(session.cash_variance) || 0
 
       session.sales?.forEach((sale: any) => {
         cashierStats[cashierName].sales_count++
-        cashierStats[cashierName].total_revenue += Number(sale.total_amount)
+        cashierStats[cashierName].total_revenue += Number(sale.total_ttc)
 
         sale.payments?.forEach((payment: any) => {
           const method = payment.payment_method

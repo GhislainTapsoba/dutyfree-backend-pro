@@ -1,9 +1,9 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET /api/reports/payments - Rapport des paiements par mode et devise
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const searchParams = request.nextUrl.searchParams
 
   const startDate = searchParams.get("start_date")
@@ -17,23 +17,24 @@ export async function GET(request: NextRequest) {
       .select(`
         id,
         sale_id,
-        sales (
-          ticket_number,
-          sale_date,
-          cashier_id,
-          users!sales_cashier_id_fkey (full_name),
-          cash_session_id,
-          cash_sessions (
-            cash_registers (name, pos_id)
-          )
-        ),
-        payment_method,
+        payment_method_id,
+        payment_methods (name, code),
         amount,
         currency_code,
         exchange_rate,
         amount_in_base_currency,
-        reference_number,
-        created_at
+        created_at,
+        sale:sales (
+          ticket_number,
+          sale_date,
+          seller_id,
+          seller:users!sales_seller_id_fkey (full_name, employee_id),
+          cash_session_id,
+          cash_sessions (
+            cash_register_id,
+            cash_registers (name, point_of_sales (name))
+          )
+        )
       `)
       .order("created_at", { ascending: false })
 
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
       query = query.lte("created_at", endDate)
     }
     if (paymentMethod) {
-      query = query.eq("payment_method", paymentMethod)
+      query = query.eq("payment_method_id", paymentMethod)
     }
 
     const { data: payments, error } = await query
@@ -52,8 +53,8 @@ export async function GET(request: NextRequest) {
 
     // Total par méthode de paiement
     const byMethod: Record<string, { count: number; amount: number; amount_base: number }> = {}
-    payments?.forEach((p) => {
-      const method = p.payment_method
+    payments?.forEach((p: any) => {
+      const method = p.payment_methods?.name || "Inconnu"
       if (!byMethod[method]) {
         byMethod[method] = { count: 0, amount: 0, amount_base: 0 }
       }
@@ -86,8 +87,8 @@ export async function GET(request: NextRequest) {
 
     // Total par caissier
     const byCashier: Record<string, { count: number; amount: number }> = {}
-    payments?.forEach((p) => {
-      const cashierName = (p.sales as any)?.users?.full_name || "Inconnu"
+    payments?.forEach((p: any) => {
+      const cashierName = p.sale?.seller?.full_name || "Inconnu"
       if (!byCashier[cashierName]) {
         byCashier[cashierName] = { count: 0, amount: 0 }
       }

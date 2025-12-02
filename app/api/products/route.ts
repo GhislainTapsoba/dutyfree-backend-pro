@@ -84,9 +84,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Retourner directement le tableau de produits
-    // La pagination peut être ajoutée dans les headers si nécessaire
-    return NextResponse.json(productsWithStock)
+    // Retourner avec le wrapper data pour cohérence
+    return NextResponse.json({ data: productsWithStock, count })
   } catch (error) {
     console.error("Error fetching products:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

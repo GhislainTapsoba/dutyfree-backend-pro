@@ -28,10 +28,23 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient()
     const body = await request.json()
 
-    const { name_fr, name_en, description } = body
+    const { name_fr, name_en, description, sort_order, image_url } = body
 
     if (!name_fr || !name_en) {
       return NextResponse.json({ error: "Champs obligatoires: name_fr, name_en" }, { status: 400 })
+    }
+
+    // Vérifier si sort_order existe déjà
+    if (sort_order !== undefined && sort_order !== null) {
+      const { data: existing } = await supabase
+        .from("product_categories")
+        .select("id")
+        .eq("sort_order", sort_order)
+        .single()
+      
+      if (existing) {
+        return NextResponse.json({ error: "Cet ordre de tri est déjà utilisé" }, { status: 409 })
+      }
     }
 
     // Générer un code automatique
@@ -44,6 +57,8 @@ export async function POST(request: NextRequest) {
         name_fr,
         name_en,
         description,
+        sort_order: sort_order || 0,
+        image_url: image_url || null,
       })
       .select()
       .single()

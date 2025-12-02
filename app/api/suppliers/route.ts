@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Liste des fournisseurs
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
 
     const search = searchParams.get("search")
@@ -36,21 +36,27 @@ export async function GET(request: NextRequest) {
 // POST - Créer un fournisseur
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const body = await request.json()
+    
+    console.log("[SUPPLIER CREATE] Request body:", body)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+    let { code, name, contact_name, email, phone, address, country, tax_id, payment_terms } = body
+
+    if (!name) {
+      console.log("[SUPPLIER CREATE] Missing required fields")
+      return NextResponse.json({ error: "Champs obligatoires: name" }, { status: 400 })
     }
-
-    const { code, name, contact_name, email, phone, address, country, tax_id, payment_terms } = body
-
-    if (!code || !name) {
-      return NextResponse.json({ error: "Champs obligatoires: code, name" }, { status: 400 })
+    
+    // Générer un code automatiquement si non fourni
+    if (!code) {
+      const prefix = name.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, 'X')
+      const timestamp = Date.now().toString().slice(-6)
+      code = `SUP-${prefix}-${timestamp}`
+      console.log("[SUPPLIER CREATE] Generated code:", code)
     }
+    
+    console.log("[SUPPLIER CREATE] Code:", code, "Name:", name)
 
     const { data, error } = await supabase
       .from("suppliers")

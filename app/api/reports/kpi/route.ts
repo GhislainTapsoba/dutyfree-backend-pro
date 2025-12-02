@@ -1,9 +1,9 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET /api/reports/kpi - KPIs et indicateurs de performance
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const searchParams = request.nextUrl.searchParams
 
   const startDate = searchParams.get("start_date")

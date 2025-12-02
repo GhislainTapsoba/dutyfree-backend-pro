@@ -6,15 +6,37 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   try {
     const supabase = createAdminClient()
     const body = await request.json()
-    const { name_fr, name_en } = body
+    const { name_fr, name_en, sort_order, image_url } = body
 
     if (!name_fr || !name_en) {
       return NextResponse.json({ error: "Champs obligatoires: name_fr, name_en" }, { status: 400 })
     }
 
+    // Vérifier si sort_order existe déjà (sauf pour cette catégorie)
+    if (sort_order !== undefined && sort_order !== null) {
+      const { data: existing } = await supabase
+        .from("product_categories")
+        .select("id")
+        .eq("sort_order", sort_order)
+        .neq("id", params.id)
+        .single()
+      
+      if (existing) {
+        return NextResponse.json({ error: "Cet ordre de tri est déjà utilisé" }, { status: 409 })
+      }
+    }
+
+    const updateData: any = { name_fr, name_en }
+    if (sort_order !== undefined) {
+      updateData.sort_order = sort_order
+    }
+    if (image_url !== undefined) {
+      updateData.image_url = image_url
+    }
+
     const { data, error } = await supabase
       .from("product_categories")
-      .update({ name_fr, name_en })
+      .update(updateData)
       .eq("id", params.id)
       .select()
       .single()

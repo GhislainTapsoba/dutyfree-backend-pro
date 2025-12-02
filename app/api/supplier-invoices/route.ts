@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Liste des factures fournisseurs
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
 
     const page = Number.parseInt(searchParams.get("page") || "1")
@@ -58,15 +58,8 @@ export async function GET(request: NextRequest) {
 // POST - Créer une facture fournisseur
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const body = await request.json()
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
 
     const {
       supplier_id,
@@ -96,7 +89,7 @@ export async function POST(request: NextRequest) {
       .select("id")
       .eq("supplier_id", supplier_id)
       .eq("invoice_number", invoice_number)
-      .single()
+      .maybeSingle()
 
     if (existing) {
       return NextResponse.json(

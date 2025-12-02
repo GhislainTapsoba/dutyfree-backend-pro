@@ -116,11 +116,12 @@ export default function POSInterface() {
     return products.filter(product => {
       if (!product) return false
       
+      const searchLower = searchQuery?.toLowerCase() || ''
       const matchesSearch = !searchQuery || 
-        (product.name_fr && product.name_fr.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (product.name_en && product.name_en.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (product.code && product.code.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (product.barcode && product.barcode.includes(searchQuery))
+        (product.name_fr && product.name_fr.toLowerCase().includes(searchLower)) ||
+        (product.name_en && product.name_en.toLowerCase().includes(searchLower)) ||
+        (product.code && product.code.toLowerCase().includes(searchLower)) ||
+        (product.barcode && product.barcode.toLowerCase().includes(searchLower))
       
       const matchesCategory = selectedCategory === 'all' || product.category_id === selectedCategory
       
