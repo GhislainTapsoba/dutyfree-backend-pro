@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { getAuthenticatedUser } from "@/lib/auth-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Liste des clients hébergés
@@ -43,15 +44,25 @@ export async function GET(request: NextRequest) {
 // POST - Enregistrer un client hébergé
 export async function POST(request: NextRequest) {
   try {
+    console.log("[Hotel Guests] 📝 Tentative de création de client hébergé")
+
+    // Vérifier l'authentification
+    const user = await getAuthenticatedUser(request)
+
+    if (!user) {
+      console.error("[Hotel Guests] ❌ Authentification échouée")
+      return NextResponse.json({
+        error: "Non autorisé",
+        details: "Token invalide"
+      }, { status: 401 })
+    }
+
+    console.log("[Hotel Guests] ✅ User authentifié:", user.email)
+
     const supabase = await createClient()
     const body = await request.json()
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
+    console.log("[Hotel Guests] 📦 Body reçu:", JSON.stringify(body, null, 2))
 
     const {
       badge_number,
@@ -66,6 +77,7 @@ export async function POST(request: NextRequest) {
     } = body
 
     if (!guest_name) {
+      console.error("[Hotel Guests] ❌ Champ guest_name manquant")
       return NextResponse.json({ error: "Champ obligatoire: guest_name" }, { status: 400 })
     }
 

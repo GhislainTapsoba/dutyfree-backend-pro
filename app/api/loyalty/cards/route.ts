@@ -1,10 +1,11 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { getAuthenticatedUser, checkUserRole } from "@/lib/auth-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Liste des cartes de fidélité
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = await createAdminClient()
     const { searchParams } = new URL(request.url)
 
     const search = searchParams.get("search")
@@ -43,15 +44,30 @@ export async function GET(request: NextRequest) {
 // POST - Créer une carte de fidélité
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const body = await request.json()
+    // Vérifier l'authentification avec auth_token cookie
+    const user = await getAuthenticatedUser(request)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
     if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({
+        error: "Non autorisé - Authentification requise",
+        details: "Token invalide ou expiré"
+      }, { status: 401 })
     }
+
+    console.log("[Loyalty Cards POST] ✅ User authentifié:", user.id, user.email)
+
+    // Vérifier le rôle (admin ou supervisor)
+    const { authorized, roleCode } = await checkUserRole(user.id, ["admin", "supervisor"])
+
+    if (!authorized) {
+      return NextResponse.json({
+        error: "Accès refusé - Rôle insuffisant",
+        details: `Seuls les administrateurs et superviseurs peuvent créer des cartes de fidélité. Votre rôle: ${roleCode || "non défini"}`
+      }, { status: 403 })
+    }
+
+    const adminSupabase = await createAdminClient()
+    const body = await request.json()
 
     const { customer_name, customer_email, customer_phone } = body
 
@@ -62,7 +78,7 @@ export async function POST(request: NextRequest) {
     // Générer numéro de carte
     const cardNumber = `LYL-${Date.now().toString(36).toUpperCase()}`
 
-    const { data, error } = await supabase
+    const { data, error } = await adminSupabase
       .from("loyalty_cards")
       .insert({
         card_number: cardNumber,
@@ -70,6 +86,9 @@ export async function POST(request: NextRequest) {
         customer_email,
         customer_phone,
         tier: "standard",
+        points_balance: 0,
+        total_points_earned: 0,
+        total_amount_spent: 0,
       })
       .select()
       .single()

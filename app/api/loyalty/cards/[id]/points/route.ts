@@ -1,24 +1,42 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { getAuthenticatedUser, checkUserRole } from "@/lib/auth-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
 // POST - Ajouter/Retirer des points
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const supabase = await createClient()
-    const body = await request.json()
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    // Vérifier l'authentification
+    const user = await getAuthenticatedUser(request)
+
     if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({
+        error: "Non autorisé",
+        details: "Authentification requise"
+      }, { status: 401 })
     }
 
-    const { transaction_type, points, sale_id, description } = body
+    // Vérifier le rôle (admin, supervisor ou cashier)
+    const { authorized, roleCode } = await checkUserRole(user.id, ["admin", "supervisor", "cashier"])
 
-    if (!transaction_type || !points) {
-      return NextResponse.json({ error: "Champs obligatoires: transaction_type, points" }, { status: 400 })
+    if (!authorized) {
+      return NextResponse.json({
+        error: "Accès refusé",
+        details: `Rôle insuffisant. Votre rôle: ${roleCode || "non défini"}`
+      }, { status: 403 })
+    }
+
+    const supabase = await createAdminClient()
+    const body = await request.json()
+
+    const { type, points, sale_id, reason, transaction_type } = body
+
+    // Support both 'type' (from frontend) and 'transaction_type' (legacy)
+    const txType = type || transaction_type
+
+    if (!points) {
+      return NextResponse.json({ error: "Champs obligatoires: points" }, { status: 400 })
     }
 
     // Récupérer la carte
@@ -31,17 +49,55 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Calculer le nouveau solde
     let newBalance = card.points_balance
     let newTotalEarned = card.total_points_earned
+    let finalTransactionType = txType
+    let pointsValue = points
 
-    if (transaction_type === "earn") {
-      newBalance += points
-      newTotalEarned += points
-    } else if (transaction_type === "redeem") {
-      if (card.points_balance < points) {
+    // Gérer les différents types de transactions
+    if (txType === "credit") {
+      // Ajout de points
+      newBalance += Math.abs(pointsValue)
+      newTotalEarned += Math.abs(pointsValue)
+      pointsValue = Math.abs(pointsValue)
+      finalTransactionType = "earn"
+    } else if (txType === "debit") {
+      // Déduction de points
+      const pointsToDeduct = Math.abs(pointsValue)
+      if (card.points_balance < pointsToDeduct) {
         return NextResponse.json({ error: "Solde de points insuffisant" }, { status: 400 })
       }
-      newBalance -= points
-    } else if (transaction_type === "adjust") {
-      newBalance += points // Peut être négatif
+      newBalance -= pointsToDeduct
+      pointsValue = -pointsToDeduct
+      finalTransactionType = "redeem"
+    } else if (txType === "adjustment") {
+      // Ajustement (peut être positif ou négatif)
+      newBalance += pointsValue
+      if (pointsValue > 0) {
+        newTotalEarned += pointsValue
+      }
+      finalTransactionType = "adjust"
+    } else if (txType === "earn") {
+      // Legacy support
+      newBalance += Math.abs(pointsValue)
+      newTotalEarned += Math.abs(pointsValue)
+      pointsValue = Math.abs(pointsValue)
+    } else if (txType === "redeem") {
+      // Legacy support
+      const pointsToDeduct = Math.abs(pointsValue)
+      if (card.points_balance < pointsToDeduct) {
+        return NextResponse.json({ error: "Solde de points insuffisant" }, { status: 400 })
+      }
+      newBalance -= pointsToDeduct
+      pointsValue = -pointsToDeduct
+    } else if (txType === "purchase") {
+      // Utilisation pour achat
+      const pointsToDeduct = Math.abs(pointsValue)
+      if (card.points_balance < pointsToDeduct) {
+        return NextResponse.json({ error: "Solde de points insuffisant" }, { status: 400 })
+      }
+      newBalance -= pointsToDeduct
+      pointsValue = -pointsToDeduct
+    } else {
+      return NextResponse.json({ error: "Type de transaction invalide" }, { status: 400 })
     }
 
     // Créer la transaction
@@ -50,10 +106,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .insert({
         loyalty_card_id: id,
         sale_id,
-        transaction_type,
-        points: transaction_type === "redeem" ? -points : points,
+        transaction_type: finalTransactionType,
+        points: pointsValue,
         points_balance_after: newBalance,
-        description,
+        description: reason || body.description,
       })
       .select()
       .single()
@@ -68,7 +124,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       updated_at: new Date().toISOString(),
     }
 
-    if (transaction_type === "earn") {
+    if (pointsValue > 0 && (txType === "credit" || txType === "earn" || txType === "adjustment")) {
       updateData.total_points_earned = newTotalEarned
     }
 

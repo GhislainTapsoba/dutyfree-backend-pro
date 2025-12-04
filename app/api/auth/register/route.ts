@@ -1,30 +1,38 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { getAuthenticatedUser, checkUserRole } from "@/lib/auth-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
 // POST - Créer un nouvel utilisateur (admin uniquement)
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const body = await request.json()
+    console.log("[Register] 📝 Tentative de création d'utilisateur")
 
-    // Vérifier que l'utilisateur actuel est admin
-    const {
-      data: { user: currentUser },
-    } = await supabase.auth.getUser()
+    // Vérifier l'authentification
+    const currentUser = await getAuthenticatedUser(request)
+
     if (!currentUser) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      console.error("[Register] ❌ Authentification échouée")
+      return NextResponse.json({
+        error: "Non autorisé",
+        details: "Authentification requise"
+      }, { status: 401 })
     }
 
-    const { data: currentUserProfile } = await supabase
-      .from("users")
-      .select("role:roles(code)")
-      .eq("id", currentUser.id)
-      .single()
+    console.log("[Register] ✅ User authentifié:", currentUser.email)
 
-    const userRole = Array.isArray(currentUserProfile?.role) ? currentUserProfile.role[0] : currentUserProfile?.role
-    if (userRole?.code !== "admin") {
-      return NextResponse.json({ error: "Seuls les administrateurs peuvent créer des utilisateurs" }, { status: 403 })
+    // Vérifier le rôle (admin uniquement)
+    const { authorized, roleCode } = await checkUserRole(currentUser.id, ["admin"])
+
+    if (!authorized) {
+      console.error("[Register] ❌ Accès refusé. Rôle:", roleCode)
+      return NextResponse.json({
+        error: "Accès refusé",
+        details: `Seuls les administrateurs peuvent créer des utilisateurs. Votre rôle: ${roleCode || "non défini"}`
+      }, { status: 403 })
     }
+
+    const supabase = await createAdminClient()
+    const body = await request.json()
 
     const { email, password, first_name, last_name, employee_id, phone, role_id, point_of_sale_id } = body
 
@@ -80,6 +88,8 @@ export async function POST(request: NextRequest) {
       entity_id: authData.user.id,
       details: { email, role_id },
     })
+
+    console.log("[Register] ✅ Utilisateur créé:", email)
 
     return NextResponse.json({ data: userProfile }, { status: 201 })
   } catch (error) {

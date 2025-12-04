@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { getAuthenticatedUser } from "@/lib/auth-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Liste des devises
@@ -27,15 +28,18 @@ export async function GET() {
 // POST - Ajouter une devise
 export async function POST(request: NextRequest) {
   try {
+    // Vérifier l'authentification
+    const user = await getAuthenticatedUser(request)
+
+    if (!user) {
+      return NextResponse.json({
+        error: "Non autorisé",
+        details: "Token invalide"
+      }, { status: 401 })
+    }
+
     const supabase = await createClient()
     const body = await request.json()
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
 
     const { code, name, symbol, exchange_rate } = body
 
