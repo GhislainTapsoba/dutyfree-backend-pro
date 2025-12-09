@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Search, ShoppingCart, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, User, Package } from 'lucide-react'
+import { Search, ShoppingCart, Plus, Minus, Trash2, CreditCard, Banknote, Receipt, User, Package, ChevronUp, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Product {
@@ -40,9 +40,10 @@ interface CartItem extends Product {
 
 interface PaymentMethod {
   id: string
+  code: string
   name: string
-  type: 'cash' | 'card' | 'mobile'
-  currency: string
+  type: 'cash' | 'card' | 'mobile_money' | 'tpe'
+  is_active: boolean
 }
 
 interface Currency {
@@ -63,11 +64,42 @@ export default function POSInterface() {
   const [selectedCurrency, setSelectedCurrency] = useState('XOF')
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [processingPayment, setProcessingPayment] = useState(false)
+  const [paymentStatus, setPaymentStatus] = useState<string>('')
 
   // Charger les données initiales
   useEffect(() => {
     loadInitialData()
   }, [])
+
+  // Recalculer les totaux du panier lors du changement de devise
+  useEffect(() => {
+    if (cart.length === 0) return
+
+    setCart(prevCart =>
+      prevCart.map(item => {
+        // Recalculer le prix selon la nouvelle devise
+        let price = 0
+        switch (selectedCurrency) {
+          case 'EUR':
+            price = item.selling_price_eur || 0
+            break
+          case 'USD':
+            price = item.selling_price_usd || 0
+            break
+          default:
+            price = item.selling_price_xof || 0
+            break
+        }
+
+        const total = item.quantity * price
+        return {
+          ...item,
+          total: isNaN(total) ? 0 : total
+        }
+      })
+    )
+  }, [selectedCurrency, cart.length])
 
   const loadInitialData = async () => {
     try {
@@ -91,14 +123,14 @@ export default function POSInterface() {
       const paymentMethodsResponse = await fetch('/api/payments/methods')
       if (paymentMethodsResponse.ok) {
         const paymentMethodsData = await paymentMethodsResponse.json()
-        setPaymentMethods(paymentMethodsData.methods || [])
+        setPaymentMethods(paymentMethodsData.data || [])
       }
 
       // Charger les devises
       const currenciesResponse = await fetch('/api/currencies')
       if (currenciesResponse.ok) {
         const currenciesData = await currenciesResponse.json()
-        setCurrencies(currenciesData.currencies || [])
+        setCurrencies(currenciesData.data || [])
       }
 
     } catch (error) {
@@ -161,14 +193,23 @@ export default function POSInterface() {
 
   // Obtenir le prix du produit selon la devise
   const getProductPrice = (product: Product) => {
+    if (!product) return 0
+
+    let price = 0
     switch (selectedCurrency) {
       case 'EUR':
-        return product.selling_price_eur || 0
+        price = product.selling_price_eur || 0
+        break
       case 'USD':
-        return product.selling_price_usd || 0
+        price = product.selling_price_usd || 0
+        break
       default:
-        return product.selling_price_xof || 0
+        price = product.selling_price_xof || 0
+        break
     }
+
+    // S'assurer que le prix est un nombre valide
+    return isNaN(price) ? 0 : Number(price)
   }
 
   // Obtenir le symbole de la devise
@@ -183,18 +224,47 @@ export default function POSInterface() {
       removeFromCart(productId)
       return
     }
-    
+
     setCart(prevCart =>
-      prevCart.map(item =>
-        item.id === productId
-          ? { 
-              ...item, 
-              quantity: newQuantity,
-              total: newQuantity * getProductPrice(item)
-            }
-          : item
-      )
+      prevCart.map(item => {
+        if (item.id === productId) {
+          const price = getProductPrice(item)
+          const total = newQuantity * price
+          return {
+            ...item,
+            quantity: newQuantity,
+            total: isNaN(total) ? 0 : total
+          }
+        }
+        return item
+      })
     )
+  }
+
+  // Déplacer un article vers le haut dans le panier
+  const moveItemUp = (index: number) => {
+    if (index === 0) return // Déjà en haut
+
+    setCart(prevCart => {
+      const newCart = [...prevCart]
+      const temp = newCart[index]
+      newCart[index] = newCart[index - 1]
+      newCart[index - 1] = temp
+      return newCart
+    })
+  }
+
+  // Déplacer un article vers le bas dans le panier
+  const moveItemDown = (index: number) => {
+    if (index === cart.length - 1) return // Déjà en bas
+
+    setCart(prevCart => {
+      const newCart = [...prevCart]
+      const temp = newCart[index]
+      newCart[index] = newCart[index + 1]
+      newCart[index + 1] = temp
+      return newCart
+    })
   }
 
   // Supprimer du panier
@@ -214,18 +284,56 @@ export default function POSInterface() {
 
   // Traiter le paiement
   const processPayment = async (paymentData: any) => {
+    if (!paymentData.payment_method_id) {
+      toast.error('Méthode de paiement non trouvée')
+      return
+    }
+
     try {
-      // Simuler le traitement du paiement
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Ici, vous ajouteriez la logique pour enregistrer la vente
+      setProcessingPayment(true)
+      setPaymentStatus('Traitement en cours...')
+
+      // Préparer les lignes de vente
+      const lines = cart.map(item => ({
+        product_id: item.id,
+        quantity: item.quantity,
+        unit_price: getProductPrice(item)
+      }))
+
+      // Préparer les paiements avec la méthode correcte
+      const payments = [{
+        payment_method_id: paymentData.payment_method_id,
+        amount: cartTotal,
+        currency_code: selectedCurrency
+      }]
+
+      // Enregistrer la vente
+      const response = await fetch('/api/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lines,
+          payments,
+          currency_code: selectedCurrency
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Erreur lors de l\'enregistrement')
+      }
+
+      setPaymentStatus('Paiement réussi!')
       toast.success('Paiement effectué avec succès!')
       clearCart()
       setIsPaymentDialogOpen(false)
       
     } catch (error) {
       console.error('Erreur lors du paiement:', error)
+      setPaymentStatus('Erreur de paiement')
       toast.error('Erreur lors du paiement')
+    } finally {
+      setProcessingPayment(false)
+      setTimeout(() => setPaymentStatus(''), 2000)
     }
   }
 
@@ -357,41 +465,78 @@ export default function POSInterface() {
               </div>
             ) : (
               <div className="space-y-4">
-                {cart.map(item => (
-                  <div key={item.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                {cart.map((item, index) => (
+                  <div key={item.id} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                    {/* Boutons monter/descendre */}
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0"
+                        onClick={() => moveItemUp(index)}
+                        disabled={index === 0}
+                      >
+                        <ChevronUp className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0"
+                        onClick={() => moveItemDown(index)}
+                        disabled={index === cart.length - 1}
+                      >
+                        <ChevronDown className="h-3 w-3" />
+                      </Button>
+                    </div>
+
                     <div className="flex-1">
                       <h4 className="font-medium text-sm">{item.name_fr}</h4>
                       <p className="text-xs text-gray-500">
-                        {getProductPrice(item).toLocaleString()} {getCurrencySymbol()}
+                        {getProductPrice(item).toLocaleString()} {getCurrencySymbol()} × {item.quantity}
+                      </p>
+                      <p className="text-xs font-semibold text-primary">
+                        Total: {(item.total || 0).toLocaleString()} {getCurrencySymbol()}
                       </p>
                     </div>
-                    
+
                     <div className="flex items-center gap-2">
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => updateCartQuantity(item.id, item.quantity - 1)}
+                        className="h-8 w-8 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          updateCartQuantity(item.id, item.quantity - 1)
+                        }}
                       >
                         <Minus className="h-3 w-3" />
                       </Button>
-                      
+
                       <span className="w-8 text-center text-sm font-medium">
                         {item.quantity}
                       </span>
-                      
+
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => updateCartQuantity(item.id, item.quantity + 1)}
+                        className="h-8 w-8 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          updateCartQuantity(item.id, item.quantity + 1)
+                        }}
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
                     </div>
-                    
+
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => removeFromCart(item.id)}
+                      className="h-8 w-8 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeFromCart(item.id)
+                      }}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -432,6 +577,14 @@ export default function POSInterface() {
                     </p>
                   </div>
                   
+                  {paymentStatus && (
+                    <div className={`text-center p-3 rounded-lg ${
+                      paymentStatus.includes('Erreur') ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
+                    }`}>
+                      <p className="text-sm font-medium">{paymentStatus}</p>
+                    </div>
+                  )}
+                  
                   <Tabs defaultValue="cash">
                     <TabsList className="grid w-full grid-cols-2">
                       <TabsTrigger value="cash">
@@ -445,17 +598,21 @@ export default function POSInterface() {
                     </TabsList>
                     
                     <TabsContent value="cash" className="space-y-4">
-                      <Input placeholder="Montant reçu" type="number" />
+                      <Input placeholder="Montant reçu" type="number" disabled={processingPayment} />
                       <Button 
                         className="w-full" 
-                        onClick={() => processPayment({ method: 'cash' })}
+                        onClick={async () => {
+                          const cashMethod = paymentMethods.find(m => m.code === 'CASH')
+                          await processPayment({ payment_method_id: cashMethod?.id })
+                        }}
+                        disabled={processingPayment}
                       >
-                        Confirmer le paiement
+                        {processingPayment ? 'Traitement...' : 'Confirmer le paiement'}
                       </Button>
                     </TabsContent>
                     
                     <TabsContent value="card" className="space-y-4">
-                      <Select>
+                      <Select disabled={processingPayment}>
                         <SelectTrigger>
                           <SelectValue placeholder="Type de carte" />
                         </SelectTrigger>
@@ -467,9 +624,18 @@ export default function POSInterface() {
                       </Select>
                       <Button 
                         className="w-full" 
-                        onClick={() => processPayment({ method: 'card' })}
+                        onClick={async () => {
+                          const cardMethod = paymentMethods.find(m => m.code === 'CARD')
+                          if (!cardMethod) {
+                            toast.error('Méthode de paiement carte non disponible')
+                            return
+                          }
+                          setPaymentStatus('En attente du TPE...')
+                          await processPayment({ payment_method_id: cardMethod.id })
+                        }}
+                        disabled={processingPayment}
                       >
-                        Traiter le paiement par carte
+                        {processingPayment ? 'En attente du TPE...' : 'Traiter le paiement par carte'}
                       </Button>
                     </TabsContent>
                   </Tabs>

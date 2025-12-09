@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Liste des méthodes de paiement
 export async function GET() {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const { data, error } = await supabase
       .from("payment_methods")
@@ -16,7 +16,7 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json({ data })
   } catch (error) {
     console.error("Error fetching payment methods:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

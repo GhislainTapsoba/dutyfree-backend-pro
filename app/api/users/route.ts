@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Liste des utilisateurs
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
 
     const search = searchParams.get("search")

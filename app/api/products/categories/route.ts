@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
         .from("product_categories")
         .select("id")
         .eq("sort_order", sort_order)
-        .single()
+        .maybeSingle()
       
       if (existing) {
         return NextResponse.json({ error: "Cet ordre de tri est déjà utilisé" }, { status: 409 })

@@ -24,7 +24,9 @@ export async function GET(request: NextRequest) {
         *,
         seller:users!sales_seller_id_fkey(id, first_name, last_name, employee_id),
         cash_register:cash_registers(id, code, name),
-        point_of_sale:point_of_sales(id, code, name)
+        point_of_sale:point_of_sales(id, code, name),
+        sale_lines(id, quantity, product_id),
+        payments(id, payment_method_id, amount, payment_methods(code, name))
       `,
       { count: "exact" },
     )
@@ -80,18 +82,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     
     console.log('[Sales POST] Request body:', JSON.stringify(body, null, 2))
-    
-    // Récupérer un utilisateur valide
-    const { data: user } = await supabase
-      .from("users")
-      .select("id")
-      .limit(1)
-      .single()
-    
-    const user_id = user?.id
-    if (!user_id) {
-      return NextResponse.json({ error: "Aucun utilisateur disponible" }, { status: 400 })
-    }
+    console.log('[Sales POST] Currency code:', body.currency_code)
 
     const {
       cash_session_id,
@@ -110,53 +101,75 @@ export async function POST(request: NextRequest) {
       payments,
     } = body
 
+    // Vérifier identification vendeur (OBLIGATOIRE selon cahier des charges)
+    if (!customer_name && !flight_reference) {
+      console.log('[Sales POST] Error: No customer identification')
+      return NextResponse.json({ 
+        error: "L'identification du client (nom ou vol) est obligatoire" 
+      }, { status: 400 })
+    }
+
     if (!lines || lines.length === 0) {
       console.log('[Sales POST] Error: No lines provided')
       return NextResponse.json({ error: "Au moins une ligne de vente requise" }, { status: 400 })
     }
 
-    // Vérifier la session (optionnel)
-    let sessionData = null
-    let cashRegisterId = null
-    let pointOfSaleId = null
-    
-    if (cash_session_id) {
-      const { data: session } = await supabase
-        .from("cash_sessions")
-        .select("*, cash_register:cash_registers(*)")
-        .eq("id", cash_session_id)
-        .eq("status", "open")
-        .single()
-
-      if (session) {
-        sessionData = session
-        cashRegisterId = session.cash_register_id
-        pointOfSaleId = session.cash_register?.point_of_sale_id
-      }
+    // Vérifier la session (OBLIGATOIRE)
+    if (!cash_session_id) {
+      console.log('[Sales POST] Error: No cash_session_id provided')
+      return NextResponse.json({ 
+        error: "Une session de caisse ouverte est obligatoire pour enregistrer une vente" 
+      }, { status: 400 })
     }
-    
-    // Si pas de session, utiliser le premier point de vente disponible
+
+    const { data: session } = await supabase
+      .from("cash_sessions")
+      .select("*, cash_register:cash_registers(*)")
+      .eq("id", cash_session_id)
+      .eq("status", "open")
+      .maybeSingle()
+
+    if (!session) {
+      console.log('[Sales POST] Error: Session not found or not open')
+      return NextResponse.json({ 
+        error: "Session de caisse introuvable ou fermée" 
+      }, { status: 400 })
+    }
+
+    const cashRegisterId = session.cash_register_id
+    const pointOfSaleId = session.cash_register?.point_of_sale_id
+    const user_id = session.user_id
+
+    if (!user_id) {
+      return NextResponse.json({ error: "Utilisateur non identifié dans la session" }, { status: 400 })
+    }
+
     if (!pointOfSaleId) {
-      const { data: defaultPos } = await supabase
-        .from("point_of_sales")
-        .select("id")
-        .eq("is_active", true)
-        .limit(1)
-        .single()
-      
-      pointOfSaleId = defaultPos?.id
+      return NextResponse.json({ 
+        error: "Point de vente non configuré pour cette caisse" 
+      }, { status: 400 })
     }
 
     // Récupérer le taux de change si devise différente de XOF
     let exchangeRate = 1
     if (currency_code && currency_code !== "XOF") {
-      const { data: currency } = await supabase
+      const { data: currency, error: currencyError } = await supabase
         .from("currencies")
-        .select("exchange_rate")
+        .select("exchange_rate, is_active")
         .eq("code", currency_code)
-        .single()
+        .eq("is_active", true)
+        .maybeSingle()
 
+      if (currencyError) {
+        console.error('[Sales POST] Error fetching currency:', currencyError)
+      }
+      
+      if (!currency) {
+        console.error(`[Sales POST] Currency ${currency_code} not found or inactive, using rate 1`)
+      }
+      
       exchangeRate = currency?.exchange_rate || 1
+      console.log(`[Sales POST] Exchange rate for ${currency_code}: ${exchangeRate}`)
     }
 
     // Récupérer les informations des produits et lots
@@ -267,7 +280,7 @@ export async function POST(request: NextRequest) {
         exchange_rate: exchangeRate,
         header_message,
         footer_message,
-        status: "pending",
+        status: payments && payments.length > 0 ? "completed" : "pending",
         sale_date: new Date().toISOString(),
       })
       .select()
@@ -300,17 +313,15 @@ export async function POST(request: NextRequest) {
         const paymentExchangeRate = payment.currency_code === "XOF" ? 1 : exchangeRate
         const amountInBase = payment.amount * paymentExchangeRate
         
-        // Si payment_method_id est null, récupérer un par défaut
-        let paymentMethodId = payment.payment_method_id
-        if (!paymentMethodId) {
-          const { data: defaultMethod } = await supabase
-            .from("payment_methods")
-            .select("id")
-            .eq("is_active", true)
-            .limit(1)
-            .single()
-          paymentMethodId = defaultMethod?.id
+        // Vérifier que payment_method_id est fourni
+        if (!payment.payment_method_id) {
+          console.error('[Sales POST] Missing payment_method_id in payment:', payment)
+          return NextResponse.json({ 
+            error: "payment_method_id est requis pour chaque paiement" 
+          }, { status: 400 })
         }
+        
+        const paymentMethodId = payment.payment_method_id
 
         processedPayments.push({
           sale_id: sale.id,
@@ -334,11 +345,6 @@ export async function POST(request: NextRequest) {
       const { error: paymentsError } = await supabase.from("payments").insert(processedPayments)
       if (paymentsError) {
         console.error('[Sales POST] Error inserting payments:', paymentsError)
-      }
-
-      // Mettre à jour le statut si entièrement payé
-      if (totalPaid >= totalTTC) {
-        await supabase.from("sales").update({ status: "completed" }).eq("id", sale.id)
       }
     }
 

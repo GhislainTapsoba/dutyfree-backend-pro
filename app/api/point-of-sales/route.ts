@@ -1,11 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
-import { getAuthenticatedUser } from "@/lib/auth-helpers"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Liste des points de vente
 export async function GET() {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const { data, error } = await supabase
       .from("point_of_sales")

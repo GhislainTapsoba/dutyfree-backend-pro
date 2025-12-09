@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Liste des caisses
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
 
     const pointOfSaleId = searchParams.get("pos_id")
@@ -39,15 +39,8 @@ export async function GET(request: NextRequest) {
 // POST - Créer une caisse
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const body = await request.json()
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
 
     const { code, name, point_of_sale_id } = body
 

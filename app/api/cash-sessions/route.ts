@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Liste des sessions de caisse
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
 
     const page = Number.parseInt(searchParams.get("page") || "1")
@@ -67,20 +67,17 @@ export async function GET(request: NextRequest) {
 // POST - Ouvrir une session de caisse
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const body = await request.json()
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+    const { cash_register_id, user_id, opening_cash, vacation_type } = body
+
+    if (!cash_register_id || !user_id) {
+      return NextResponse.json({ error: "Champs obligatoires: cash_register_id, user_id" }, { status: 400 })
     }
 
-    const { cash_register_id, opening_cash } = body
-
-    if (!cash_register_id) {
-      return NextResponse.json({ error: "Champs obligatoires: cash_register_id" }, { status: 400 })
+    if (opening_cash === undefined || opening_cash === null) {
+      return NextResponse.json({ error: "Le fond de caisse (opening_cash) est obligatoire" }, { status: 400 })
     }
 
     // Vérifier qu'il n'y a pas de session ouverte sur cette caisse
@@ -89,10 +86,32 @@ export async function POST(request: NextRequest) {
       .select("id")
       .eq("cash_register_id", cash_register_id)
       .eq("status", "open")
-      .single()
+      .maybeSingle()
 
     if (existingSession) {
       return NextResponse.json({ error: "Une session est déjà ouverte sur cette caisse" }, { status: 409 })
+    }
+
+    // Vérifier que l'utilisateur n'a pas déjà une session ouverte
+    const { data: userSession } = await supabase
+      .from("cash_sessions")
+      .select("id")
+      .eq("user_id", user_id)
+      .eq("status", "open")
+      .maybeSingle()
+
+    if (userSession) {
+      return NextResponse.json({ error: "L'utilisateur a déjà une session ouverte" }, { status: 409 })
+    }
+
+    // Déterminer la vacation automatiquement si non fournie
+    const openingTime = new Date()
+    let finalVacationType = vacation_type
+    if (!finalVacationType) {
+      const hour = openingTime.getHours()
+      if (hour >= 6 && hour < 14) finalVacationType = 'morning'
+      else if (hour >= 14 && hour < 22) finalVacationType = 'afternoon'
+      else finalVacationType = 'night'
     }
 
     // Générer numéro de session
@@ -103,9 +122,10 @@ export async function POST(request: NextRequest) {
       .insert({
         session_number: sessionNumber,
         cash_register_id,
-        user_id: user.id,
-        opening_time: new Date().toISOString(),
-        opening_cash: opening_cash || 0,
+        user_id,
+        opening_time: openingTime.toISOString(),
+        opening_cash,
+        vacation_type: finalVacationType,
         status: "open",
       })
       .select(`
@@ -121,11 +141,11 @@ export async function POST(request: NextRequest) {
 
     // Log activité
     await supabase.from("user_activity_logs").insert({
-      user_id: user.id,
+      user_id,
       action: "open_session",
       entity_type: "cash_session",
       entity_id: data.id,
-      details: { opening_cash: opening_cash || 0 },
+      details: { opening_cash, vacation_type: finalVacationType },
     })
 
     return NextResponse.json({ data }, { status: 201 })

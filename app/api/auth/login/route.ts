@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { cookies } from "next/headers";
 
 export async function POST(request: NextRequest) {
   console.log("[LOGIN] Request received from:", request.headers.get("origin"));
@@ -104,12 +106,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Mettre à jour la dernière connexion avec admin client
+    const adminClient = createAdminClient();
+    await adminClient
+      .from("users")
+      .update({ last_login_at: new Date().toISOString() })
+      .eq("id", authData.user.id);
+
     // Log de l'activité
     await supabase.from("user_activity_logs").insert({
       user_id: authData.user.id,
       action: "login",
       entity_type: "auth",
       details: { email: userEmail },
+    });
+
+    // Définir le cookie user_id
+    const cookieStore = await cookies();
+    cookieStore.set('user_id', authData.user.id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7 // 7 jours
     });
 
     // Formater la réponse selon le format attendu par le frontend
@@ -122,6 +140,7 @@ export async function POST(request: NextRequest) {
         firstName: userProfile.first_name,
         lastName: userProfile.last_name,
         role: userProfile.role?.code || "user",
+        pointOfSaleId: userProfile.point_of_sale_id,
         isActive: isActive,
         createdAt: userProfile.created_at,
         updatedAt: userProfile.updated_at,

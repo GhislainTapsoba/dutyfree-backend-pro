@@ -1,11 +1,11 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Détail session avec statistiques
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Récupérer la session
     const { data: session, error } = await supabase
@@ -81,17 +81,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const body = await request.json()
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
-
-    const { closing_cash, notes, status } = body
+    const { 
+      closing_counted_cash,
+      closing_counted_card,
+      closing_counted_mobile,
+      notes, 
+      status,
+      user_id 
+    } = body
 
     // Récupérer la session actuelle
     const { data: currentSession } = await supabase.from("cash_sessions").select("*").eq("id", id).single()
@@ -104,36 +104,53 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Session déjà fermée" }, { status: 400 })
     }
 
-    // Calculer le montant espèces attendu
-    const { data: cashPayments } = await supabase
+    // Récupérer les méthodes de paiement
+    const { data: paymentMethods } = await supabase
+      .from("payment_methods")
+      .select("id, code")
+      .in("code", ["CASH", "CARD", "MOBILE"])
+    
+    const methodsMap = new Map(paymentMethods?.map(m => [m.code, m.id]) || [])
+
+    // Calculer les montants attendus par méthode
+    const { data: payments } = await supabase
       .from("payments")
-      .select("amount_in_base_currency")
+      .select("amount_in_base_currency, payment_method_id")
       .eq("cash_session_id", id)
       .eq("status", "completed")
-      .eq(
-        "payment_method_id",
-        await supabase
-          .from("payment_methods")
-          .select("id")
-          .eq("code", "CASH")
-          .single()
-          .then((r) => r.data?.id),
-      )
 
-    const totalCash = cashPayments?.reduce((sum, p) => sum + p.amount_in_base_currency, 0) || 0
-    const expectedCash = currentSession.opening_cash + totalCash
-    const variance = closing_cash !== undefined ? closing_cash - expectedCash : null
+    let expectedCash = currentSession.opening_cash
+    let expectedCard = 0
+    let expectedMobile = 0
+
+    payments?.forEach(p => {
+      if (p.payment_method_id === methodsMap.get("CASH")) expectedCash += p.amount_in_base_currency
+      else if (p.payment_method_id === methodsMap.get("CARD")) expectedCard += p.amount_in_base_currency
+      else if (p.payment_method_id === methodsMap.get("MOBILE")) expectedMobile += p.amount_in_base_currency
+    })
+
+    const cashVariance = closing_counted_cash !== undefined ? closing_counted_cash - expectedCash : null
+    const cardVariance = closing_counted_card !== undefined ? closing_counted_card - expectedCard : null
+    const mobileVariance = closing_counted_mobile !== undefined ? closing_counted_mobile - expectedMobile : null
 
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     }
 
     if (status === "closed") {
+      if (closing_counted_cash === undefined) {
+        return NextResponse.json({ error: "Le comptage des espèces est obligatoire pour fermer" }, { status: 400 })
+      }
       updateData.status = "closed"
       updateData.closing_time = new Date().toISOString()
-      updateData.closing_cash = closing_cash
+      updateData.closing_cash = closing_counted_cash
+      updateData.closing_counted_cash = closing_counted_cash
+      updateData.closing_counted_card = closing_counted_card || 0
+      updateData.closing_counted_mobile = closing_counted_mobile || 0
       updateData.expected_cash = expectedCash
-      updateData.cash_variance = variance
+      updateData.cash_variance = cashVariance
+      updateData.card_variance = cardVariance
+      updateData.mobile_variance = mobileVariance
     }
 
     if (status === "validated") {
@@ -151,13 +168,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Log activité
-    await supabase.from("user_activity_logs").insert({
-      user_id: user.id,
-      action: status === "closed" ? "close_session" : "validate_session",
-      entity_type: "cash_session",
-      entity_id: id,
-      details: { closing_cash, variance },
-    })
+    if (user_id) {
+      await supabase.from("user_activity_logs").insert({
+        user_id,
+        action: status === "closed" ? "close_session" : "validate_session",
+        entity_type: "cash_session",
+        entity_id: id,
+        details: { closing_counted_cash, cash_variance: cashVariance },
+      })
+    }
 
     return NextResponse.json({ data })
   } catch (error) {

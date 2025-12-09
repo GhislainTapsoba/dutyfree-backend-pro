@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     // Filtre optionnel pour les non lues
     if (unreadOnly) {
-      query = query.eq("read", false)
+      query = query.eq("is_read", false)
     }
 
     const { data, error, count } = await query
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
         title,
         message,
         type,
-        read: false,
+        is_read: false,
       })
       .select()
       .single()

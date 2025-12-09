@@ -30,8 +30,11 @@ export async function GET(request: NextRequest) {
         currency_code,
         shift,
         seller_id,
+        status,
         users!sales_seller_id_fkey (first_name, last_name),
         cash_session_id,
+        point_of_sale_id,
+        point_of_sales (name),
         cash_sessions (
           cash_register_id,
           cash_registers (name, point_of_sale_id, point_of_sales (name))
@@ -44,14 +47,16 @@ export async function GET(request: NextRequest) {
         ),
         payments (amount, payment_method_id, payment_method, currency_code)
       `)
-      .eq("status", "completed")
+      .in("status", ["completed", "pending"])
 
     // Filtres de date
+    console.log('[Reports] Date filters:', { startDate, endDate })
     if (startDate) {
       query = query.gte("sale_date", startDate)
     }
     if (endDate) {
-      query = query.lte("sale_date", endDate)
+      // Inclure toute la journée de fin
+      query = query.lte("sale_date", `${endDate}T23:59:59`)
     }
 
     // Filtre par caissier
@@ -67,6 +72,8 @@ export async function GET(request: NextRequest) {
     const { data: sales, error } = await query.order("sale_date", { ascending: false })
 
     if (error) throw error
+    
+    console.log('[Reports] Found', sales?.length, 'sales')
 
     // Calcul des agrégats
     const totalRevenue = sales?.reduce((sum, sale) => sum + Number(sale.total_ttc), 0) || 0
@@ -135,6 +142,7 @@ export async function GET(request: NextRequest) {
     // Groupement par période si demandé
     let groupedData: any[] = []
     if (groupBy) {
+      console.log('[Reports] Grouping', sales?.length, 'sales by', groupBy)
       const grouped: Record<string, { date: string; sales: number; revenue: number }> = {}
       
       sales?.forEach((sale) => {
@@ -161,6 +169,7 @@ export async function GET(request: NextRequest) {
       })
       
       groupedData = Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date))
+      console.log('[Reports] Grouped data:', groupedData)
     }
 
     return NextResponse.json({

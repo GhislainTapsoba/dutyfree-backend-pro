@@ -22,14 +22,14 @@ export async function GET(request: NextRequest) {
           .select(`
             ticket_number,
             sale_date,
-            total_amount,
-            total_tax,
+            total_ttc,
+            tax_amount,
             discount_amount,
             currency_code,
             status,
-            shift,
-            users!sales_cashier_id_fkey (full_name),
-            cash_sessions (cash_registers (name, point_of_sales (name)))
+            seller:users!seller_id(first_name, last_name),
+            cash_register:cash_registers(name),
+            point_of_sale:point_of_sales(name)
           `)
           .gte("sale_date", startDate || "1900-01-01")
           .lte("sale_date", endDate || "2100-12-31")
@@ -43,50 +43,50 @@ export async function GET(request: NextRequest) {
           "Remise",
           "Devise",
           "Statut",
-          "Vacation",
           "Caissier",
           "Caisse",
           "Point de vente",
         ]
         data =
-          sales?.map((s) => ({
-            ticket: s.ticket_number,
-            date: s.sale_date,
-            amount: s.total_amount,
-            tax: s.total_tax,
-            discount: s.discount_amount,
-            currency: s.currency_code,
-            status: s.status,
-            shift: s.shift,
-            cashier: (s.users as any)?.full_name,
-            register: (s.cash_sessions as any)?.cash_registers?.name,
-            pos: (s.cash_sessions as any)?.cash_registers?.point_of_sales?.name,
-          })) || []
+          sales?.map((s) => {
+            const date = new Date(s.sale_date)
+            const dateStr = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+            return {
+              ticket: s.ticket_number,
+              date: dateStr,
+              amount: s.total_ttc,
+              tax: s.tax_amount,
+              discount: s.discount_amount,
+              currency: s.currency_code,
+              status: s.status,
+              cashier: s.seller ? `${s.seller.first_name} ${s.seller.last_name}` : '',
+              register: s.cash_register?.name || '',
+              pos: s.point_of_sale?.name || '',
+            }
+          }) || []
         break
 
       case "stock":
         const { data: products } = await supabase
           .from("products")
           .select(`
-            sku,
+            code,
             barcode,
-            name,
-            stock_quantity,
+            name_fr,
             min_stock_level,
             purchase_price,
-            sale_price_xof,
-            sale_price_eur,
-            sale_price_usd,
-            product_categories (name)
+            selling_price_xof,
+            selling_price_eur,
+            selling_price_usd,
+            category:product_categories(name_fr)
           `)
           .eq("is_active", true)
-          .order("name")
+          .order("name_fr")
 
         headers = [
-          "SKU",
+          "Code",
           "Code-barres",
           "Produit",
-          "Stock",
           "Seuil min",
           "Prix achat",
           "Prix XOF",
@@ -96,16 +96,15 @@ export async function GET(request: NextRequest) {
         ]
         data =
           products?.map((p) => ({
-            sku: p.sku,
-            barcode: p.barcode,
-            name: p.name,
-            stock: p.stock_quantity,
+            code: p.code,
+            barcode: p.barcode || '',
+            name: p.name_fr,
             min_level: p.min_stock_level,
-            purchase_price: p.purchase_price,
-            price_xof: p.sale_price_xof,
-            price_eur: p.sale_price_eur,
-            price_usd: p.sale_price_usd,
-            category: (p.product_categories as any)?.name,
+            purchase_price: p.purchase_price || 0,
+            price_xof: p.selling_price_xof,
+            price_eur: p.selling_price_eur || 0,
+            price_usd: p.selling_price_usd || 0,
+            category: p.category?.name_fr || '',
           })) || []
         break
 
@@ -113,13 +112,12 @@ export async function GET(request: NextRequest) {
         const { data: payments } = await supabase
           .from("payments")
           .select(`
-            sales (ticket_number, sale_date, users!sales_cashier_id_fkey (full_name)),
-            payment_method,
+            sale:sales(ticket_number, sale_date, seller:users!seller_id(first_name, last_name)),
+            payment_methods(name),
             amount,
             currency_code,
             exchange_rate,
             amount_in_base_currency,
-            reference_number,
             created_at
           `)
           .gte("created_at", startDate || "1900-01-01")
@@ -134,35 +132,37 @@ export async function GET(request: NextRequest) {
           "Devise",
           "Taux change",
           "Montant base",
-          "Référence",
           "Caissier",
         ]
         data =
-          payments?.map((p) => ({
-            ticket: (p.sales as any)?.ticket_number,
-            date: p.created_at,
-            method: p.payment_method,
-            amount: p.amount,
-            currency: p.currency_code,
-            exchange_rate: p.exchange_rate,
-            base_amount: p.amount_in_base_currency,
-            reference: p.reference_number,
-            cashier: (p.sales as any)?.users?.full_name,
-          })) || []
+          payments?.map((p) => {
+            const date = new Date(p.created_at)
+            const dateStr = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+            return {
+              ticket: p.sale?.ticket_number || '',
+              date: dateStr,
+              method: p.payment_methods?.name || '',
+              amount: p.amount,
+              currency: p.currency_code,
+              exchange_rate: p.exchange_rate,
+              base_amount: p.amount_in_base_currency,
+              cashier: p.sale?.seller ? `${p.sale.seller.first_name} ${p.sale.seller.last_name}` : '',
+            }
+          }) || []
         break
     }
 
     if (format === "csv") {
-      // Générer CSV
-      const csvRows = [headers.join(";")]
+      // Générer CSV avec BOM UTF-8 pour Excel
+      const csvRows = [headers.join(",")]
       data.forEach((row) => {
         csvRows.push(
           Object.values(row)
-            .map((v) => `"${v || ""}"`)
-            .join(";"),
+            .map((v) => `"${String(v || "").replace(/"/g, '""')}"`)
+            .join(","),
         )
       })
-      const csv = csvRows.join("\n")
+      const csv = "\uFEFF" + csvRows.join("\r\n") // BOM UTF-8 + CRLF pour Windows
 
       return new NextResponse(csv, {
         headers: {

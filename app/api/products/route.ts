@@ -20,9 +20,19 @@ export async function GET(request: NextRequest) {
 
     let query = supabase.from("products").select(
       `
-        *,
-        category:product_categories(id, code, name_fr, name_en),
-        supplier:suppliers(id, code, name)
+        id,
+        code,
+        barcode,
+        name_fr,
+        name_en,
+        selling_price_xof,
+        selling_price_eur,
+        selling_price_usd,
+        min_stock_level,
+        is_active,
+        category_id,
+        image_url,
+        category:product_categories(id, name_fr)
       `,
       { count: "exact" },
     )

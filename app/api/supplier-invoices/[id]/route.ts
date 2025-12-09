@@ -47,6 +47,8 @@ export async function PUT(
     const { id } = await params
     const supabase = createAdminClient()
     const body = await request.json()
+    
+    console.log('PUT supplier-invoice:', id, body)
 
     const {
       invoice_date,
@@ -56,9 +58,6 @@ export async function PUT(
       discount_amount,
       other_charges,
       status,
-      payment_date,
-      payment_method,
-      payment_reference,
       notes,
     } = body
 
@@ -71,9 +70,6 @@ export async function PUT(
     if (discount_amount !== undefined) updates.discount_amount = discount_amount
     if (other_charges !== undefined) updates.other_charges = other_charges
     if (status) updates.status = status
-    if (payment_date) updates.payment_date = payment_date
-    if (payment_method) updates.payment_method = payment_method
-    if (payment_reference) updates.payment_reference = payment_reference
     if (notes !== undefined) updates.notes = notes
 
     // Recalculer total si montants modifiés
@@ -82,7 +78,7 @@ export async function PUT(
         .from("supplier_invoices")
         .select("subtotal, tax_amount, discount_amount, other_charges")
         .eq("id", id)
-        .single()
+        .maybeSingle()
 
       updates.total =
         (updates.subtotal ?? currentInvoice?.subtotal ?? 0) +
@@ -101,6 +97,7 @@ export async function PUT(
       .single()
 
     if (error) {
+      console.error('Supabase update error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
@@ -111,7 +108,10 @@ export async function PUT(
     return NextResponse.json({ data })
   } catch (error) {
     console.error("Error updating supplier invoice:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json({ 
+      error: "Internal server error", 
+      details: error instanceof Error ? error.message : String(error) 
+    }, { status: 500 })
   }
 }
 

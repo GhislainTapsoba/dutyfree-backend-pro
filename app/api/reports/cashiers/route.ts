@@ -11,89 +11,75 @@ export async function GET(request: NextRequest) {
   const cashierId = searchParams.get("cashier_id")
 
   try {
-    // Récupérer les sessions de caisse
-    let sessionsQuery = supabase
-      .from("cash_sessions")
+    // Récupérer les ventes directement
+    let salesQuery = supabase
+      .from("sales")
       .select(`
         id,
-        user_id,
-        users (full_name, employee_id),
-        cash_register_id,
-        cash_registers (name, point_of_sales (name)),
-        opening_time,
-        closing_time,
-        opening_cash,
-        closing_cash,
-        expected_cash,
-        cash_variance,
-        status,
-        sales (
-          id,
-          total_ttc,
-          tax_amount,
-          discount_amount,
-          payments (payment_method, amount, currency_code)
-        )
+        ticket_number,
+        sale_date,
+        total_ttc,
+        tax_amount,
+        discount_amount,
+        seller_id,
+        users!sales_seller_id_fkey (id, first_name, last_name, employee_id),
+        payments (payment_method_id, amount, currency_code, payment_methods(code, name))
       `)
-      .order("opening_time", { ascending: false })
+      .eq("status", "completed")
+      .order("sale_date", { ascending: false })
 
     if (startDate) {
-      sessionsQuery = sessionsQuery.gte("opening_time", startDate)
+      salesQuery = salesQuery.gte("sale_date", startDate)
     }
     if (endDate) {
-      sessionsQuery = sessionsQuery.lte("opening_time", endDate)
+      salesQuery = salesQuery.lte("sale_date", `${endDate}T23:59:59`)
     }
     if (cashierId) {
-      sessionsQuery = sessionsQuery.eq("user_id", cashierId)
+      salesQuery = salesQuery.eq("seller_id", cashierId)
     }
 
-    const { data: sessions, error } = await sessionsQuery
+    const { data: sales, error } = await salesQuery
     if (error) throw error
 
     // Agréger par caissier
     const cashierStats: Record<
       string,
       {
+        id: string
         name: string
         employee_id: string
-        sessions_count: number
         sales_count: number
         total_revenue: number
-        total_variance: number
         average_ticket: number
         payment_methods: Record<string, number>
       }
     > = {}
 
-    sessions?.forEach((session) => {
-      const cashierName = (session.users as any)?.full_name || "Inconnu"
-      const employeeId = (session.users as any)?.employee_id || ""
+    sales?.forEach((sale) => {
+      const user = sale.users as any
+      const cashierId = user?.id || "unknown"
+      const cashierName = user ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || "Inconnu" : "Inconnu"
+      const employeeId = user?.employee_id || ""
 
-      if (!cashierStats[cashierName]) {
-        cashierStats[cashierName] = {
+      if (!cashierStats[cashierId]) {
+        cashierStats[cashierId] = {
+          id: cashierId,
           name: cashierName,
           employee_id: employeeId,
-          sessions_count: 0,
           sales_count: 0,
           total_revenue: 0,
-          total_variance: 0,
           average_ticket: 0,
           payment_methods: {},
         }
       }
 
-      cashierStats[cashierName].sessions_count++
-      cashierStats[cashierName].total_variance += Number(session.cash_variance) || 0
+      cashierStats[cashierId].sales_count++
+      cashierStats[cashierId].total_revenue += Number(sale.total_ttc)
 
-      session.sales?.forEach((sale: any) => {
-        cashierStats[cashierName].sales_count++
-        cashierStats[cashierName].total_revenue += Number(sale.total_ttc)
-
-        sale.payments?.forEach((payment: any) => {
-          const method = payment.payment_method
-          cashierStats[cashierName].payment_methods[method] =
-            (cashierStats[cashierName].payment_methods[method] || 0) + Number(payment.amount)
-        })
+      sale.payments?.forEach((payment: any) => {
+        const method = payment.payment_methods?.name || "Autre"
+        cashierStats[cashierId].payment_methods[method] =
+          (cashierStats[cashierId].payment_methods[method] || 0) + Number(payment.amount)
       })
     })
 
@@ -108,12 +94,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       summary: {
         total_cashiers: Object.keys(cashierStats).length,
-        total_sessions: sessions?.length || 0,
+        total_sales: sales?.length || 0,
         total_revenue: Object.values(cashierStats).reduce((sum, c) => sum + c.total_revenue, 0),
-        total_variance: Object.values(cashierStats).reduce((sum, c) => sum + c.total_variance, 0),
       },
       cashiers: ranking,
-      sessions_detail: sessions,
       period: { start: startDate, end: endDate },
     })
   } catch (error) {

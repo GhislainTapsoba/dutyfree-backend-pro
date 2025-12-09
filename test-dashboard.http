@@ -1,0 +1,50 @@
+### Test Dashboard API Routes
+### Assurez-vous d'être authentifié avant d'exécuter ces tests
+
+@baseUrl = http://localhost:3000
+@token = YOUR_AUTH_TOKEN_HERE
+
+###
+# 1. Récupérer les statistiques du dashboard pour aujourd'hui
+GET {{baseUrl}}/api/dashboard/stats
+Authorization: Bearer {{token}}
+
+###
+# 2. Récupérer les statistiques du dashboard pour une date spécifique
+GET {{baseUrl}}/api/dashboard/stats?date=2025-12-05
+Authorization: Bearer {{token}}
+
+###
+# 3. Evolution des ventes - 7 derniers jours (par jour)
+GET {{baseUrl}}/api/dashboard/sales-evolution?period=7days&group_by=day
+Authorization: Bearer {{token}}
+
+###
+# 4. Evolution des ventes - 30 derniers jours (par jour)
+GET {{baseUrl}}/api/dashboard/sales-evolution?period=30days&group_by=day
+Authorization: Bearer {{token}}
+
+###
+# 5. Evolution des ventes - 30 derniers jours (par semaine)
+GET {{baseUrl}}/api/dashboard/sales-evolution?period=30days&group_by=week
+Authorization: Bearer {{token}}
+
+###
+# 6. Evolution des ventes - 90 derniers jours (par mois)
+GET {{baseUrl}}/api/dashboard/sales-evolution?period=90days&group_by=month
+Authorization: Bearer {{token}}
+
+###
+# 7. Evolution des ventes - 1 an (par mois)
+GET {{baseUrl}}/api/dashboard/sales-evolution?period=year&group_by=month
+Authorization: Bearer {{token}}
+
+###
+# Route existante - Rapport KPI pour comparaison
+GET {{baseUrl}}/api/reports/kpi?start_date=2025-12-01&end_date=2025-12-05
+Authorization: Bearer {{token}}
+
+###
+# Route existante - Rapport des ventes quotidiennes
+GET {{baseUrl}}/api/reports/sales/daily?date=2025-12-05
+Authorization: Bearer {{token}}

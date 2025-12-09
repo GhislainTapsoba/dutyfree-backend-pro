@@ -116,34 +116,71 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-// DELETE - Supprimer (désactiver) un produit
+// DELETE - Supprimer (désactiver ou supprimer définitivement) un produit
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const supabase = createAdminClient()
+    const { searchParams } = new URL(request.url)
+    const permanent = searchParams.get('permanent') === 'true'
 
     // Utilisation d'un user_id hardcodé pour le moment
     const user_id = "00000000-0000-0000-0000-000000000000"
 
-    // Soft delete - désactiver le produit
-    const { error } = await supabase
-      .from("products")
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      .eq("id", id)
+    // Vérifier si le produit a des ventes
+    const { data: sales } = await supabase
+      .from("sale_lines")
+      .select("id")
+      .eq("product_id", id)
+      .limit(1)
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (permanent) {
+      if (sales && sales.length > 0) {
+        return NextResponse.json({ 
+          error: "Impossible de supprimer: ce produit a des ventes associées" 
+        }, { status: 400 })
+      }
+
+      // Suppression définitive
+      const { error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", id)
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+
+      // Log activité
+      await supabase.from("user_activity_logs").insert({
+        user_id: user_id,
+        action: "delete_permanent",
+        entity_type: "product",
+        entity_id: id,
+      })
+
+      return NextResponse.json({ message: "Produit supprimé définitivement" })
+    } else {
+      // Soft delete - désactiver le produit
+      const { error } = await supabase
+        .from("products")
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq("id", id)
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+
+      // Log activité
+      await supabase.from("user_activity_logs").insert({
+        user_id: user_id,
+        action: "delete",
+        entity_type: "product",
+        entity_id: id,
+      })
+
+      return NextResponse.json({ message: "Produit désactivé" })
     }
-
-    // Log activité
-    await supabase.from("user_activity_logs").insert({
-      user_id: user_id,
-      action: "delete",
-      entity_type: "product",
-      entity_id: id,
-    })
-
-    return NextResponse.json({ message: "Produit désactivé" })
   } catch (error) {
     console.error("Error deleting product:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

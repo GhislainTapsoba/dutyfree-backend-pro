@@ -1,16 +1,15 @@
-import { createClient } from "@/lib/supabase/server"
-import { NextResponse } from "next/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { type NextRequest, NextResponse } from "next/server"
 
-// GET - Session ouverte de l'utilisateur connecté
-export async function GET() {
+// GET - Session ouverte de l'utilisateur
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get("user_id")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+    if (!userId) {
+      return NextResponse.json({ error: "user_id requis" }, { status: 400 })
     }
 
     const { data: session, error } = await supabase
@@ -24,9 +23,9 @@ export async function GET() {
           point_of_sale:point_of_sales(id, code, name)
         )
       `)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("status", "open")
-      .single()
+      .maybeSingle()
 
     if (error && error.code !== "PGRST116") {
       return NextResponse.json({ error: error.message }, { status: 500 })

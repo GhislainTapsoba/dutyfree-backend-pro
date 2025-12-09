@@ -1,11 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
-import { getAuthenticatedUser } from "@/lib/auth-helpers"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Liste des devises
 export async function GET() {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const { data, error } = await supabase
       .from("currencies")
@@ -18,7 +17,7 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json({ data })
   } catch (error) {
     console.error("Error fetching currencies:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

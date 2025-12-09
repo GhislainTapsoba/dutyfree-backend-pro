@@ -1,11 +1,11 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - Détail d'une devise avec conversion
 export async function GET(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   try {
     const { code } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
 
     const amount = Number.parseFloat(searchParams.get("amount") || "1")
@@ -40,15 +40,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   try {
     const { code } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const body = await request.json()
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
 
     const { exchange_rate, name, symbol, is_active } = body
 
@@ -72,9 +65,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Log activité
+    // Log activité (user_id sera null car admin client)
     await supabase.from("user_activity_logs").insert({
-      user_id: user.id,
+      user_id: null,
       action: "update_exchange_rate",
       entity_type: "currency",
       details: { currency_code: code, new_rate: exchange_rate },

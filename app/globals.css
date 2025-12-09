@@ -123,3 +123,37 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Styles d'impression pour les tickets */
+@media print {
+  /* Masquer tout sauf le contenu du ticket */
+  body * {
+    visibility: hidden;
+  }
+  
+  /* Afficher uniquement le ticket et ses enfants */
+  .print-ticket,
+  .print-ticket * {
+    visibility: visible;
+  }
+  
+  /* Positionner le ticket en haut de la page */
+  .print-ticket {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  
+  /* Masquer les boutons d'action lors de l'impression */
+  .no-print {
+    display: none !important;
+  }
+  
+  /* Supprimer les marges et paddings inutiles */
+  @page {
+    margin: 0.5cm;
+  }
+}

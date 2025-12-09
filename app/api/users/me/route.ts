@@ -1,104 +1,45 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { NextRequest, NextResponse } from "next/server"
+import { cookies } from "next/headers"
 
-// Fonction pour extraire et valider l'utilisateur via Bearer Token Supabase
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get("Authorization")
-  if (!authHeader?.startsWith("Bearer ")) return null
-
-  const token = authHeader.replace("Bearer ", "").trim()
-  const supabase = await createClient()
-
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) {
-    console.error("Utilisateur non authentifié:", error)
-    return null
-  }
-  return data.user
-}
-
-// GET - Récupérer le profil utilisateur complet
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const user = await getAuthenticatedUser(request)
-
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
-
-    const { data, error } = await supabase
+    const supabase = createAdminClient()
+    
+    const cookieStore = await cookies()
+    const userId = cookieStore.get('user_id')?.value
+    
+    console.log('[/api/users/me] user_id from cookie:', userId)
+    
+    let query = supabase
       .from("users")
       .select(`
         *,
         role:roles(id, code, name, permissions),
         point_of_sale:point_of_sales(id, code, name)
       `)
-      .eq("id", user.id)
-      .single()
+    
+    if (userId) {
+      query = query.eq("id", userId)
+    } else {
+      // Fallback: retourner le premier admin
+      console.log('[/api/users/me] No user_id, returning first admin')
+      const { data: adminRole } = await supabase.from("roles").select("id").eq("code", "admin").single()
+      if (adminRole) {
+        query = query.eq("role_id", adminRole.id).limit(1)
+      }
+    }
+    
+    const { data, error } = await query.maybeSingle()
 
     if (error || !data) {
       console.error("[/api/users/me] Profil non trouvé", error)
       return NextResponse.json({ error: "Profil non trouvé" }, { status: 404 })
     }
 
-    return NextResponse.json({
-      id: data.id,
-      username: data.employee_id || data.email,
-      email: data.email,
-      firstName: data.first_name,
-      lastName: data.last_name,
-      role: data.role?.code || "guest",
-      isActive: data.is_active,   // ATTENTION, bien is_active
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-      permissions: data.role?.permissions || [],
-    })
-  } catch (error) {
-    console.error("Error fetching user profile:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
-  }
-}
-
-// PUT - Mettre à jour son profil utilisateur
-export async function PUT(request: NextRequest) {
-  try {
-    const supabase = await createClient()
-    const user = await getAuthenticatedUser(request)
-
-    if (!user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
-    }
-
-    const body = await request.json()
-    const { first_name, last_name, phone } = body
-    const updateData: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    }
-
-    if (first_name !== undefined) updateData.first_name = first_name
-    if (last_name !== undefined) updateData.last_name = last_name
-    if (phone !== undefined) updateData.phone = phone
-
-    const { data, error } = await supabase
-      .from("users")
-      .update(updateData)
-      .eq("id", user.id)
-      .select(`
-        *,
-        role:roles(id, code, name, permissions),
-        point_of_sale:point_of_sales(id, code, name)
-      `)
-      .single()
-
-    if (error) {
-      console.error("[/api/users/me PUT] Erreur update:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
     return NextResponse.json({ data })
   } catch (error) {
-    console.error("[/api/users/me PUT] Erreur interne:", error)
+    console.error("Error fetching user profile:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 // GET - État des stocks
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
 
     const pointOfSaleId = searchParams.get("pos_id")
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase.from("product_lots").select(`
         *,
-        product:products(id, code, name_fr, name_en, min_stock_level, category_id),
+        product:products(id, code, name_fr, name_en, min_stock_level, category_id, image_url, selling_price_xof, category:product_categories(id, name_fr, name_en)),
         storage_location:storage_locations(id, code, name, point_of_sale_id),
         customs_ledger:customs_ledgers(id, ledger_number, status)
       `)
