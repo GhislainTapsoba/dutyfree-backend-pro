@@ -3,7 +3,10 @@ import { createServerClient } from '@supabase/ssr'
 
 export async function proxy(request: NextRequest) {
   const origin = request.headers.get('origin') || 'http://localhost:3000'
-  const allowedOrigins = ['http://localhost:3000']
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'https://dutyfree-frontend-pro.vercel.app'
+  ]
   const allowedOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0]
 
   // ✅ 1. OPTIONS preflight CORS
