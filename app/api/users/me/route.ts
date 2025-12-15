@@ -8,9 +8,7 @@ export async function GET(request: NextRequest) {
     
     const cookieStore = await cookies()
     const userId = cookieStore.get('user_id')?.value
-    
-    console.log('[/api/users/me] user_id from cookie:', userId)
-    
+
     let query = supabase
       .from("users")
       .select(`

@@ -8,8 +8,6 @@ export async function GET(request: NextRequest) {
     // ✅ EXTRAIT Bearer token du header (comme ton client fait)
     const authHeader = request.headers.get('Authorization')
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-    
-    console.log('[DEBUG] Bearer token extrait:', token ? 'OK' : 'NULL')
 
     if (!token) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
@@ -17,9 +15,8 @@ export async function GET(request: NextRequest) {
 
     // ✅ VALIDATION JWT avec Supabase (comme getAuthenticatedUser interne)
     const { data: { user }, error } = await supabase.auth.getUser(token)
-    
+
     if (error || !user) {
-      console.log('[DEBUG] JWT invalide')
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 

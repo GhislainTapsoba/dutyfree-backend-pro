@@ -7,24 +7,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const { id } = await params
 
-    console.log("[Points History] 📊 Requête pour carte:", id)
-    console.log("[Points History] 🔑 Headers:", {
-      authorization: request.headers.get('authorization') ? 'Présent' : 'Absent',
-      cookie: request.headers.get('cookie') ? 'Présent' : 'Absent'
-    })
-
     // Vérifier l'authentification
     const user = await getAuthenticatedUser(request)
 
     if (!user) {
-      console.error("[Points History] ❌ Authentification échouée")
       return NextResponse.json({
         error: "Non autorisé",
         details: "Authentification requise"
       }, { status: 401 })
     }
-
-    console.log("[Points History] ✅ User authentifié:", user.email)
 
     // Vérifier le rôle (admin, supervisor ou cashier)
     const { authorized, roleCode } = await checkUserRole(user.id, ["admin", "supervisor", "cashier"])

@@ -246,16 +246,8 @@ export async function POST(request: NextRequest) {
       console.error('[Sales POST] Error generating ticket:', ticketError)
     }
     const ticketNumber = ticketData || `TK${Date.now()}`
-    console.log('[Sales POST] Ticket number:', ticketNumber)
 
     // Créer la vente
-    console.log('[Sales POST] Creating sale with data:', {
-      ticket_number: ticketNumber,
-      point_of_sale_id: pointOfSaleId,
-      seller_id: user_id,
-      subtotal,
-      total_ttc: totalTTC
-    })
     const { data: sale, error: saleError } = await supabase
       .from("sales")
       .insert({

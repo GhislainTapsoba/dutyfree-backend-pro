@@ -54,8 +54,6 @@ export async function POST(request: NextRequest) {
       }, { status: 401 })
     }
 
-    console.log("[Loyalty Cards POST] ✅ User authentifié:", user.id, user.email)
-
     // Vérifier le rôle (admin ou supervisor)
     const { authorized, roleCode } = await checkUserRole(user.id, ["admin", "supervisor"])
 

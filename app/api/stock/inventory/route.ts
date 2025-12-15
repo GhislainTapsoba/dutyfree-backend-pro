@@ -49,7 +49,6 @@ export async function POST(request: NextRequest) {
     // Récupérer un utilisateur réel ou utiliser null
     const { data: users } = await supabase.from("users").select("id").limit(1).single()
     const user_id = users?.id || null
-    console.log("[INVENTORY CREATE] User ID:", user_id)
 
     const { point_of_sale_id, inventory_date, notes } = body
 

@@ -5,20 +5,15 @@ import { type NextRequest, NextResponse } from "next/server"
 // POST - Créer un nouvel utilisateur (admin uniquement)
 export async function POST(request: NextRequest) {
   try {
-    console.log("[Register] 📝 Tentative de création d'utilisateur")
-
     // Vérifier l'authentification
     const currentUser = await getAuthenticatedUser(request)
 
     if (!currentUser) {
-      console.error("[Register] ❌ Authentification échouée")
       return NextResponse.json({
         error: "Non autorisé",
         details: "Authentification requise"
       }, { status: 401 })
     }
-
-    console.log("[Register] ✅ User authentifié:", currentUser.email)
 
     // Vérifier le rôle (admin uniquement)
     const { authorized, roleCode } = await checkUserRole(currentUser.id, ["admin"])
@@ -88,8 +83,6 @@ export async function POST(request: NextRequest) {
       entity_id: authData.user.id,
       details: { email, role_id },
     })
-
-    console.log("[Register] ✅ Utilisateur créé:", email)
 
     return NextResponse.json({ data: userProfile }, { status: 201 })
   } catch (error) {

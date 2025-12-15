@@ -13,14 +13,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const user = await getAuthenticatedUser(request)
 
     if (!user) {
-      console.error("[Menu Details] ❌ Authentification échouée")
       return NextResponse.json({
         error: "Non autorisé",
         details: "Authentification requise"
       }, { status: 401 })
     }
-
-    console.log("[Menu Details] ✅ User authentifié:", user.email)
 
     // Vérifier le rôle (admin, supervisor ou cashier)
     const { authorized, roleCode } = await checkUserRole(user.id, ["admin", "supervisor", "cashier"])
@@ -78,14 +75,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const user = await getAuthenticatedUser(request)
 
     if (!user) {
-      console.error("[Menu Update] ❌ Authentification échouée")
       return NextResponse.json({
         error: "Non autorisé",
         details: "Authentification requise"
       }, { status: 401 })
     }
-
-    console.log("[Menu Update] ✅ User authentifié:", user.email)
 
     // Vérifier le rôle (admin ou supervisor)
     const { authorized, roleCode } = await checkUserRole(user.id, ["admin", "supervisor"])
@@ -197,8 +191,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         details: "Authentification requise"
       }, { status: 401 })
     }
-
-    console.log("[Menu Delete] ✅ User authentifié:", user.email)
 
     // Vérifier le rôle (admin uniquement)
     const { authorized, roleCode } = await checkUserRole(user.id, ["admin"])

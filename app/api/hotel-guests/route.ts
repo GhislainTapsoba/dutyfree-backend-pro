@@ -50,14 +50,11 @@ export async function POST(request: NextRequest) {
     const user = await getAuthenticatedUser(request)
 
     if (!user) {
-      console.error("[Hotel Guests] ❌ Authentification échouée")
       return NextResponse.json({
         error: "Non autorisé",
         details: "Token invalide"
       }, { status: 401 })
     }
-
-    console.log("[Hotel Guests] ✅ User authentifié:", user.email)
 
     const supabase = await createClient()
     const body = await request.json()

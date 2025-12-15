@@ -41,8 +41,6 @@ export async function PUT(request: NextRequest) {
     const supabase = createAdminClient()
     const body = await request.json()
 
-    console.log("[COMPANY_INFO] Received data:", body)
-
     const { company_name, company_address, company_phone, company_email, tax_id, logo_url, receipt_header, receipt_footer } = body
 
     // Vérifier si une entrée existe déjà

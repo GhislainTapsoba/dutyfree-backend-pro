@@ -13,14 +13,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const user = await getAuthenticatedUser(request)
 
     if (!user) {
-      console.error("[Loyalty Card Details] ❌ Authentification échouée")
       return NextResponse.json({
         error: "Non autorisé",
         details: "Authentification requise"
       }, { status: 401 })
     }
-
-    console.log("[Loyalty Card Details] ✅ User authentifié:", user.email)
 
     // Vérifier le rôle (admin, supervisor ou cashier)
     const { authorized, roleCode } = await checkUserRole(user.id, ["admin", "supervisor", "cashier"])

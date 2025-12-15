@@ -61,14 +61,11 @@ export async function POST(request: NextRequest) {
     const user = await getAuthenticatedUser(request)
 
     if (!user) {
-      console.error("[Menus] ❌ Authentification échouée")
       return NextResponse.json({
         error: "Non autorisé",
         details: "Token invalide"
       }, { status: 401 })
     }
-
-    console.log("[Menus] ✅ User authentifié:", user.email)
 
     const supabase = await createAdminClient()
 

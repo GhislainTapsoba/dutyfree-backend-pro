@@ -6,12 +6,7 @@ import type { User } from "@supabase/supabase-js"
  * Get authenticated user from auth_token cookie OR Authorization header
  */
 export async function getAuthenticatedUser(request: NextRequest): Promise<User | null> {
-  // Debug: Afficher TOUS les cookies et headers reçus
-  const allCookies = request.cookies.getAll()
   const authHeader = request.headers.get('authorization')
-
-  console.log("[Auth Helper] 🍪 Cookies reçus:", allCookies.map(c => c.name).join(', '))
-  console.log("[Auth Helper] 🔑 Authorization header:", authHeader ? 'Présent' : 'Absent')
 
   const supabase = await createClient()
 
@@ -21,25 +16,19 @@ export async function getAuthenticatedUser(request: NextRequest): Promise<User |
   if (!token && authHeader) {
     // Extraire le token du header "Bearer TOKEN"
     token = authHeader.replace('Bearer ', '')
-    console.log("[Auth Helper] 📋 Token extrait du header Authorization")
   }
 
   if (!token) {
-    console.log("[Auth Helper] ❌ Aucun token trouvé (ni cookie ni header)")
     return null
   }
-
-  console.log("[Auth Helper] ✅ Token trouvé, validation...")
 
   // Vérifier token avec Supabase
   const { data, error } = await supabase.auth.getUser(token)
 
   if (error || !data.user) {
-    console.error("[Auth Helper] ❌ Token invalide:", error?.message)
     return null
   }
 
-  console.log("[Auth Helper] ✅ User authentifié:", data.user.id, data.user.email)
   return data.user
 }
 
@@ -70,7 +59,6 @@ export async function checkUserRole(userId: string, allowedRoles: string[]): Pro
     }
 
     const isAuthorized = allowedRoles.includes(roleCode)
-    console.log("[Role Check] User role:", roleCode, "Allowed:", allowedRoles, "Authorized:", isAuthorized)
 
     return { authorized: isAuthorized, roleCode }
   } catch (error) {

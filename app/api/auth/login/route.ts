@@ -4,26 +4,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { cookies } from "next/headers";
 
 export async function POST(request: NextRequest) {
-  console.log("[LOGIN] Request received from:", request.headers.get("origin"));
-  console.log("[LOGIN] Method:", request.method);
-  console.log("[LOGIN] URL:", request.url);
-
   try {
     const supabase = await createClient();
     const body = await request.json();
-
-    console.log("[LOGIN] Body parsed:", { username: body.username, email: body.email });
 
     const { username, password, email } = body;
 
     // Support both username and email login
     const loginEmail = email || username;
 
-    console.log("[LOGIN] loginEmail:", loginEmail);
-    console.log("[LOGIN] password length:", password?.length);
-
     if (!loginEmail || !password) {
-      console.log("[LOGIN] Missing credentials");
       return NextResponse.json(
         { message: "Email/Username et mot de passe requis" },
         { status: 400 }
@@ -32,7 +22,6 @@ export async function POST(request: NextRequest) {
 
     // Si c'est un username (pas d'@), chercher l'email correspondant
     let userEmail = loginEmail;
-    console.log("[LOGIN] Checking if loginEmail contains @:", loginEmail.includes("@"));
     if (!loginEmail.includes("@")) {
       const { data: userData, error: userError } = await supabase
         .from("users")
@@ -51,7 +40,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Authentification avec Supabase
-    console.log("[LOGIN] Attempting Supabase auth with email:", userEmail);
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: userEmail,
       password: password,
@@ -65,8 +53,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("[LOGIN] Auth successful, user ID:", authData.user?.id);
-
     if (!authData.user) {
       return NextResponse.json(
         { message: "Erreur d'authentification" },
@@ -75,7 +61,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Récupérer le profil utilisateur
-    console.log("[LOGIN] Fetching user profile for ID:", authData.user.id);
     const { data: userProfile, error: profileError } = await supabase
       .from("users")
       .select(`
@@ -93,13 +78,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("[LOGIN] Profile found, role:", userProfile.role?.code);
-
     // Vérifier si l'utilisateur est actif
     const isActive = userProfile.is_active ?? userProfile.active ?? true;
-    console.log("[LOGIN] User active status:", isActive);
     if (isActive === false) {
-      console.log("[LOGIN] User account is disabled");
       return NextResponse.json(
         { message: "Compte désactivé" },
         { status: 403 }
