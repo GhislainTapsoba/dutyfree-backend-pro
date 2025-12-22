@@ -41,6 +41,10 @@ export async function GET(request: NextRequest) {
     const { data: sales, error } = await salesQuery
     if (error) throw error
 
+    // Compter les ventes sans caissier assigné
+    const salesWithoutCashier = sales?.filter(sale => !sale.seller_id || !(sale.users as any)?.id) || []
+    const totalSalesWithoutCashier = salesWithoutCashier.reduce((sum, sale) => sum + Number(sale.total_ttc), 0)
+
     // Agréger par caissier
     const cashierStats: Record<
       string,
@@ -96,9 +100,14 @@ export async function GET(request: NextRequest) {
         total_cashiers: Object.keys(cashierStats).length,
         total_sales: sales?.length || 0,
         total_revenue: Object.values(cashierStats).reduce((sum, c) => sum + c.total_revenue, 0),
+        sales_without_cashier: salesWithoutCashier.length,
+        revenue_without_cashier: totalSalesWithoutCashier,
       },
       cashiers: ranking,
       period: { start: startDate, end: endDate },
+      warnings: salesWithoutCashier.length > 0 ? [
+        `${salesWithoutCashier.length} vente(s) sans caissier assigné pour un total de ${totalSalesWithoutCashier.toFixed(2)} XOF`
+      ] : [],
     })
   } catch (error) {
     console.error("Error generating cashiers report:", error)

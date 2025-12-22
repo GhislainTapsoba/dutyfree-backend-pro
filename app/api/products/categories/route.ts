@@ -15,7 +15,12 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ data })
+    // Cache public pour 1 heure, stale-while-revalidate pour 24h
+    return NextResponse.json({ data }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
+      }
+    })
   } catch (error) {
     console.error("Error fetching categories:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
